@@ -416,3 +416,97 @@ export async function changesInEquity(startDate?: string, endDate?: string): Pro
     reconciled: openingEquity.plus(capitalMovements).plus(netIncome).minus(closingEquity).abs().lessThan(0.01),
   };
 }
+
+export async function inventoryValuation(): Promise<any[]> {
+  const items = (await query('SELECT * FROM inventory_items ORDER BY sku')).rows;
+  const result: any[] = [];
+  for (const item of items) {
+    const movements = (await query(
+      'SELECT * FROM stock_movements WHERE item_id = $1 ORDER BY movement_date, id',
+      [item.id],
+    )).rows;
+    let qty = money(0);
+    let totalCost = money(0);
+    for (const m of movements) {
+      const q = money(m.quantity);
+      if (q.isPositive()) {
+        totalCost = totalCost.plus(q.times(money(m.unit_cost)));
+        qty = qty.plus(q);
+      } else {
+        const avg = qty.isZero() ? money(0) : totalCost.div(qty);
+        totalCost = totalCost.plus(q.times(avg));
+        qty = qty.plus(q);
+      }
+    }
+    const averageCost = qty.isZero() ? money(0) : totalCost.div(qty).toDecimalPlaces(2);
+    result.push({
+      sku: item.sku,
+      name: item.name,
+      unit: item.unit,
+      quantity: qty.toDecimalPlaces(2),
+      averageCost,
+      totalValue: totalCost.toDecimalPlaces(2),
+    });
+  }
+  return result;
+}
+
+export async function bankReconciliation(accountCode: string, asOfDate?: string): Promise<any> {
+  const asOf = asOfDate || new Date().toISOString().slice(0, 10);
+  const acct = (await query('SELECT id, code, name, type FROM accounts WHERE code = $1', [accountCode])).rows[0];
+  if (!acct) throw new Error(`Account not found: ${accountCode}`);
+
+  const balances = await accountBalances(undefined, asOf);
+  const b = balances[acct.id] || { debit: money(0), credit: money(0) };
+  const glBalance = acct.type === 'asset' ? b.debit.minus(b.credit) : b.credit.minus(b.debit);
+
+  const glRows = (await query(`
+    SELECT je.entry_date, je.reference, je.description, l.line_type, l.amount
+    FROM journal_entry_lines l
+    JOIN journal_entries je ON je.id = l.journal_entry_id
+    WHERE l.account_id = $1 AND je.status = 'posted' AND je.entry_date <= $2::date
+    ORDER BY je.entry_date, je.id, l.line_no
+  `, [acct.id, asOf])).rows;
+
+  const stmtRows = (await query(
+    'SELECT * FROM bank_transactions WHERE account_id = $1 AND transaction_date <= $2::date ORDER BY transaction_date, id',
+    [acct.id, asOf],
+  )).rows;
+
+  const gl = glRows.map((r) => ({
+    date: r.entry_date,
+    reference: r.reference,
+    description: r.description,
+    amount: r.line_type === 'debit' ? money(r.amount) : money(r.amount).negated(),
+  }));
+  const stmt = stmtRows.map((r) => ({
+    date: r.transaction_date,
+    reference: r.reference,
+    description: r.description,
+    amount: money(r.amount),
+  }));
+
+  const statementBalance = stmt.reduce((s, t) => s.plus(t.amount), money(0));
+
+  const used = new Array(stmt.length).fill(false);
+  const unmatchedGL: any[] = [];
+  const matched: any[] = [];
+  for (const g of gl) {
+    const idx = stmt.findIndex((s, i) => !used[i] && s.amount.equals(g.amount) && s.date === g.date);
+    if (idx >= 0) { used[idx] = true; matched.push({ gl: g, statement: stmt[idx] }); }
+    else unmatchedGL.push(g);
+  }
+  const unmatchedStatement = stmt.filter((_, i) => !used[i]);
+
+  return {
+    accountCode: acct.code,
+    accountName: acct.name,
+    asOf,
+    glBalance: glBalance.toDecimalPlaces(2),
+    statementBalance: statementBalance.toDecimalPlaces(2),
+    difference: glBalance.minus(statementBalance).toDecimalPlaces(2),
+    matchedCount: matched.length,
+    unmatchedGL,
+    unmatchedStatement,
+  };
+}

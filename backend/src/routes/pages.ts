@@ -3,6 +3,7 @@ import { query } from '../db';
 import { verifyPassword } from '../auth';
 import * as reports from '../reports';
 import { money } from '../money';
+import { closeYear } from '../services/yearEnd';
 
 const router = express.Router();
 
@@ -88,6 +89,10 @@ router.get('/', async (req, res, next) => {
         <a href="/reports/fixed-assets">Assets</a>
         <a href="/reports/comparative-pl">Compare</a>
         <a href="/reports/equity-changes">Equity</a>
+        <a href="/reports/inventory">Inventory</a>
+        <a href="/reports/bank-reconciliation">Bank Rec</a>
+        <a href="/recurring-entries">Recurring</a>
+        <a href="/year-end-close">Year-End</a>
         <a href="/logout">Logout (${(req as any).session.username})</a>
       </div>
       <div>
@@ -280,6 +285,60 @@ router.get('/reports/equity-changes', async (req, res, next) => {
       <tr><td><b>Closing equity</b></td><td class="num"><b>${d.closingEquity.toFixed(2)}</b></td></tr></table>
       <p class="${d.reconciled ? 'ok' : 'bad'}">${d.reconciled ? '✓ Reconciles' : '⚠ Does not reconcile'}</p>`));
   } catch (e) { next(e); }
+});
+
+router.get('/reports/inventory', async (req, res, next) => {
+  try {
+    const rows = await reports.inventoryValuation();
+    const html = rows.map((r: any) => `<tr><td>${r.sku}</td><td>${r.name}</td><td>${r.unit}</td><td class="num">${r.quantity.toFixed(2)}</td><td class="num">${r.averageCost.toFixed(2)}</td><td class="num"><b>${r.totalValue.toFixed(2)}</b></td></tr>`).join('');
+    res.send(reportPage('Inventory Valuation (Moving Average)', `<table><tr><th>SKU</th><th>Item</th><th>Unit</th><th class="num">Qty</th><th class="num">Avg Cost</th><th class="num">Value</th></tr>${html || '<tr><td colspan="6">No inventory items</td></tr>'}</table>`));
+  } catch (e) { next(e); }
+});
+
+router.get('/reports/bank-reconciliation', async (req, res, next) => {
+  try {
+    const accounts = (await query("SELECT code, name FROM accounts WHERE code IN ('1000','1005','1010') AND is_active = TRUE ORDER BY code")).rows;
+    const code = req.query.account as string;
+    let body = '<p>Select a bank/cash account.</p>';
+    if (code) {
+      const d = await reports.bankReconciliation(code, req.query.as_of as string);
+      const glRows = d.unmatchedGL.map((t: any) => `<tr><td>${t.date}</td><td>${t.reference}</td><td>${t.description}</td><td class="num">${t.amount.toFixed(2)}</td></tr>`).join('');
+      const stmtRows = d.unmatchedStatement.map((t: any) => `<tr><td>${t.date}</td><td>${t.reference}</td><td>${t.description}</td><td class="num">${t.amount.toFixed(2)}</td></tr>`).join('');
+      body = `<p><b>GL balance:</b> ${d.glBalance.toFixed(2)} &nbsp;|&nbsp; <b>Statement:</b> ${d.statementBalance.toFixed(2)} &nbsp;|&nbsp; <b>Difference:</b> ${d.difference.toFixed(2)} &nbsp;|&nbsp; Matched: ${d.matchedCount}</p>
+        <h2 style="color:#38bdf8;font-size:16px">In books, not in statement (${d.unmatchedGL.length})</h2><table><tr><th>Date</th><th>Ref</th><th>Desc</th><th class="num">Amount</th></tr>${glRows || '<tr><td colspan="4">None</td></tr>'}</table>
+        <h2 style="color:#38bdf8;font-size:16px">In statement, not in books (${d.unmatchedStatement.length})</h2><table><tr><th>Date</th><th>Ref</th><th>Desc</th><th class="num">Amount</th></tr>${stmtRows || '<tr><td colspan="4">None</td></tr>'}</table>`;
+    }
+    const options = accounts.map((a: any) => `<option value="${a.code}" ${a.code === code ? 'selected' : ''}>${a.code} ${a.name}</option>`).join('');
+    res.send(reportPage('Bank Reconciliation', `<form method="get"><select name="account"><option value="">-- select --</option>${options}</select> <button>Reconcile</button></form>${body}`));
+  } catch (e) { next(e); }
+});
+
+router.get('/recurring-entries', async (req, res, next) => {
+  try {
+    const rows = (await query('SELECT * FROM recurring_entries ORDER BY next_run_date, id')).rows;
+    const html = rows.map((r: any) => `<tr><td>${r.id}</td><td>${r.description}</td><td>${r.frequency}</td><td>${r.next_run_date}</td><td>${r.is_active ? 'active' : 'paused'}</td></tr>`).join('');
+    res.send(reportPage('Recurring Entries', `<p>Post via <code>POST /api/actions/process-recurring</code>. Create via <code>POST /api/recurring-entries</code>.</p><table><tr><th>ID</th><th>Description</th><th>Frequency</th><th>Next Run</th><th>Status</th></tr>${html || '<tr><td colspan="5">No recurring entries</td></tr>'}</table>`));
+  } catch (e) { next(e); }
+});
+
+router.get('/year-end-close', async (req, res, next) => {
+  try {
+    const closures = (await query('SELECT * FROM year_end_closures ORDER BY year DESC')).rows;
+    const html = closures.map((c: any) => `<tr><td>${c.year}</td><td class="num">${c.net_income}</td><td>${c.closed_at}</td></tr>`).join('');
+    res.send(reportPage('Year-End Close', `<form method="post" action="/year-end-close"><input name="year" placeholder="Year (e.g. 2026)" value="2026"><button>Close Year</button></form>
+      <p>Closes all revenue/expense accounts to Retained Earnings and locks the year.</p>
+      <table><tr><th>Year</th><th class="num">Net Income</th><th>Closed At</th></tr>${html || '<tr><td colspan="3">No years closed yet</td></tr>'}</table>`));
+  } catch (e) { next(e); }
+});
+
+router.post('/year-end-close', async (req, res, next) => {
+  try {
+    const year = Number(req.body.year);
+    await closeYear(year);
+    return res.redirect('/year-end-close');
+  } catch (e: any) {
+    return res.send(reportPage('Year-End Close', `<p class="bad">${e.message}</p><a href="/year-end-close">← Back</a>`));
+  }
 });
 
 export default router;

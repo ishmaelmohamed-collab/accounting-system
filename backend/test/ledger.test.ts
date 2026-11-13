@@ -120,3 +120,21 @@ describe('depth reports (departments, assets, comparative, equity)', () => {
     expect(d.closingEquity).toBeDefined();
   });
 });
+
+describe('inventory + bank reconciliation', () => {
+  it('inventory valuation returns an array', async () => {
+    const rows = await reports.inventoryValuation();
+    expect(Array.isArray(rows)).toBe(true);
+  });
+
+  it('bank reconciliation computes GL and statement balances', async () => {
+    const d = await reports.bankReconciliation('1005');
+    expect(d.glBalance).toBeDefined();
+    expect(d.statementBalance).toBeDefined();
+    expect(d.difference).toBeDefined();
+  });
+
+  it('bank reconciliation rejects an unknown account', async () => {
+    await expect(reports.bankReconciliation('9999')).rejects.toThrow(/not found/);
+  });
+});

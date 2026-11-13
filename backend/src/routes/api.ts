@@ -4,8 +4,10 @@ import { requireAuth } from '../auth';
 import * as journal from '../services/journal';
 import { createInvoice } from '../services/invoice';
 import { recordPayment } from '../services/payment';
+import { createRecurringEntry, processRecurringEntries } from '../services/recurring';
+import { closeYear } from '../services/yearEnd';
 import * as reports from '../reports';
-import { validate, postEntrySchema, createInvoiceSchema, recordPaymentSchema, partySchema, reverseEntrySchema, departmentSchema, fixedAssetSchema } from '../validation';
+import { validate, postEntrySchema, createInvoiceSchema, recordPaymentSchema, partySchema, reverseEntrySchema, departmentSchema, fixedAssetSchema, inventoryItemSchema, stockMovementSchema, bankTransactionSchema, recurringEntrySchema, closeYearSchema } from '../validation';
 
 const router = express.Router();
 router.use(requireAuth);
@@ -161,6 +163,65 @@ router.get('/reports/comparative-profit-and-loss', async (req, res, next) => {
 });
 router.get('/reports/changes-in-equity', async (req, res, next) => {
   try { res.json(await reports.changesInEquity(req.query.start as string, req.query.end as string)); } catch (e) { next(e); }
+});
+
+router.get('/inventory-items', async (req, res, next) => {
+  try { res.json((await query('SELECT * FROM inventory_items ORDER BY sku')).rows); } catch (e) { next(e); }
+});
+router.post('/inventory-items', validate(inventoryItemSchema), async (req, res, next) => {
+  try {
+    const { sku, name, unit } = req.body;
+    const r = await query('INSERT INTO inventory_items (sku, name, unit) VALUES ($1,$2,$3) RETURNING *', [sku, name, unit]);
+    res.status(201).json(r.rows[0]);
+  } catch (e) { next(e); }
+});
+router.get('/stock-movements', async (req, res, next) => {
+  try { res.json((await query('SELECT * FROM stock_movements ORDER BY movement_date DESC, id DESC')).rows); } catch (e) { next(e); }
+});
+router.post('/stock-movements', validate(stockMovementSchema), async (req, res, next) => {
+  try {
+    const { itemId, movementDate, quantity, unitCost, reference } = req.body;
+    const r = await query('INSERT INTO stock_movements (item_id, movement_date, quantity, unit_cost, reference) VALUES ($1,$2::date,$3,$4,$5) RETURNING *', [itemId, movementDate, quantity, unitCost, reference]);
+    res.status(201).json(r.rows[0]);
+  } catch (e) { next(e); }
+});
+
+router.get('/bank-transactions', async (req, res, next) => {
+  try { res.json((await query('SELECT * FROM bank_transactions ORDER BY transaction_date DESC, id DESC')).rows); } catch (e) { next(e); }
+});
+router.post('/bank-transactions', validate(bankTransactionSchema), async (req, res, next) => {
+  try {
+    const { accountId, transactionDate, description, amount, reference } = req.body;
+    const r = await query('INSERT INTO bank_transactions (account_id, transaction_date, description, amount, reference) VALUES ($1,$2::date,$3,$4,$5) RETURNING *', [accountId, transactionDate, description, amount, reference]);
+    res.status(201).json(r.rows[0]);
+  } catch (e) { next(e); }
+});
+
+router.get('/recurring-entries', async (req, res, next) => {
+  try { res.json((await query('SELECT * FROM recurring_entries ORDER BY next_run_date, id')).rows); } catch (e) { next(e); }
+});
+router.post('/recurring-entries', validate(recurringEntrySchema), async (req, res, next) => {
+  try { res.status(201).json(await createRecurringEntry(req.body)); } catch (e) { next(e); }
+});
+router.post('/actions/process-recurring', async (req, res, next) => {
+  try {
+    const asOf = (req.body && req.body.asOfDate) || new Date().toISOString().slice(0, 10);
+    res.json({ posted: await processRecurringEntries(asOf) });
+  } catch (e) { next(e); }
+});
+
+router.post('/actions/close-year', validate(closeYearSchema), async (req, res, next) => {
+  try { res.status(201).json(await closeYear(req.body.year)); } catch (e) { handleError(res, e); }
+});
+
+router.get('/reports/inventory-valuation', async (req, res, next) => {
+  try { res.json(await reports.inventoryValuation()); } catch (e) { next(e); }
+});
+router.get('/reports/bank-reconciliation', async (req, res, next) => {
+  try {
+    if (!req.query.account) return res.status(400).json({ error: 'account code required' });
+    res.json(await reports.bankReconciliation(req.query.account as string, req.query.as_of as string));
+  } catch (e) { next(e); }
 });
 
 export default router;

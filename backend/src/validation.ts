@@ -88,3 +88,41 @@ export const fixedAssetSchema = z.object({
   salvageValue: z.union([z.string(), z.number()]).optional().default('0'),
   usefulLifeYears: z.number().int().positive(),
 });
+
+export const inventoryItemSchema = z.object({
+  sku: z.string().min(1),
+  name: z.string().min(1),
+  unit: z.string().optional().default('each'),
+});
+
+export const stockMovementSchema = z.object({
+  itemId: z.number().int().positive(),
+  movementDate: z.string().min(1),
+  quantity: z.union([z.string(), z.number()]),
+  unitCost: z.union([z.string(), z.number()]),
+  reference: z.string().optional(),
+});
+
+export const bankTransactionSchema = z.object({
+  accountId: z.number().int().positive(),
+  transactionDate: z.string().min(1),
+  description: z.string().min(1),
+  amount: z.union([z.string(), z.number()]),
+  reference: z.string().optional(),
+});
+
+export const recurringEntrySchema = z.object({
+  description: z.string().min(1),
+  frequency: z.enum(['weekly', 'monthly', 'quarterly', 'yearly']),
+  nextRunDate: z.string().min(1),
+  lines: z.array(z.object({
+    accountCode: z.string().min(1),
+    lineType: z.enum(['debit', 'credit']),
+    amount: z.union([z.string(), z.number()]),
+    description: z.string().optional(),
+  })).min(1),
+});
+
+export const closeYearSchema = z.object({
+  year: z.number().int().min(2000).max(2100),
+});
