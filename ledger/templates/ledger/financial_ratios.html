@@ -1,0 +1,25 @@
+{% extends 'ledger/base.html' %}
+{% block title %}Financial Ratios{% endblock %}
+{% block content %}
+  <h1>Financial Ratios</h1>
+  <p class="sub">Key performance indicators.</p>
+
+  <form method="get" class="filterbar">
+    <div class="form-row"><label>As of</label><input type="date" name="as_of" value="{{ as_of }}"></div>
+    <button class="btn" type="submit">Apply</button>
+  </form>
+
+  <div class="grid">
+    <div class="card"><div class="num">{{ data.gross_margin }}</div><div class="label">Gross Margin</div></div>
+    <div class="card"><div class="num">{{ data.net_margin }}</div><div class="label">Net Margin</div></div>
+    <div class="card"><div class="num">{{ data.current_ratio }}</div><div class="label">Current Ratio</div></div>
+    <div class="card"><div class="num">{{ data.return_on_equity }}</div><div class="label">Return on Equity</div></div>
+  </div>
+
+  <table>
+    <tr><th>Metric</th><th class="num">Value</th></tr>
+    <tr><td>Revenue</td><td class="num">{{ data.revenue|floatformat:2 }}</td></tr>
+    <tr><td>Gross Profit</td><td class="num">{{ data.gross_profit|floatformat:2 }}</td></tr>
+    <tr><td>Net Income</td><td class="num">{{ data.net_income|floatformat:2 }}</td></tr>
+  </table>
+{% endblock %}

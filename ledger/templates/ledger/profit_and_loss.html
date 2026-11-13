@@ -1,0 +1,44 @@
+{% extends 'ledger/base.html' %}
+{% block title %}Profit & Loss{% endblock %}
+{% block content %}
+  <h1>Profit &amp; Loss</h1>
+  <p class="sub">
+    {% if data.start_date or data.end_date %}
+      Period: {{ data.start_date|default:'beginning' }} → {{ data.end_date|default:'today' }}
+    {% else %}
+      All posted activity
+    {% endif %}
+  </p>
+
+  <form method="get" class="filterbar">
+    <div class="form-row"><label>Start</label><input type="date" name="start" value="{{ start }}"></div>
+    <div class="form-row"><label>End</label><input type="date" name="end" value="{{ end }}"></div>
+    <button class="btn" type="submit">Apply</button>
+  </form>
+
+  <h2>Revenue</h2>
+  <table>
+    <tr><th>Code</th><th>Account</th><th class="num">Amount</th></tr>
+    {% for r in data.revenue %}
+    <tr><td>{{ r.account.code }}</td><td>{{ r.account.name }}</td><td class="num credit">{{ r.amount|floatformat:2 }}</td></tr>
+    {% empty %}
+    <tr><td colspan="3" class="muted">No revenue in this period.</td></tr>
+    {% endfor %}
+    <tr><td colspan="2"><strong>Total Revenue</strong></td><td class="num"><strong>{{ data.total_revenue|floatformat:2 }}</strong></td></tr>
+  </table>
+
+  <h2>Expenses</h2>
+  <table>
+    <tr><th>Code</th><th>Account</th><th class="num">Amount</th></tr>
+    {% for e in data.expense %}
+    <tr><td>{{ e.account.code }}</td><td>{{ e.account.name }}</td><td class="num debit">{{ e.amount|floatformat:2 }}</td></tr>
+    {% empty %}
+    <tr><td colspan="3" class="muted">No expenses in this period.</td></tr>
+    {% endfor %}
+    <tr><td colspan="2"><strong>Total Expenses</strong></td><td class="num"><strong>{{ data.total_expense|floatformat:2 }}</strong></td></tr>
+  </table>
+
+  <div class="grid" style="max-width: 400px;">
+    <div class="card"><div class="num">{{ data.net_income|floatformat:2 }}</div><div class="label">Net Income</div></div>
+  </div>
+{% endblock %}

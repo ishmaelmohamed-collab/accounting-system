@@ -1,0 +1,26 @@
+{% extends 'ledger/base.html' %}
+{% block title %}Budget Variance{% endblock %}
+{% block content %}
+  <h1>Budget Variance</h1>
+  <p class="sub">Budget vs actual for the period (create budgets in the Admin).</p>
+
+  <form method="get" class="filterbar">
+    <div class="form-row"><label>Start</label><input type="date" name="start" value="{{ start }}"></div>
+    <div class="form-row"><label>End</label><input type="date" name="end" value="{{ end }}"></div>
+    <button class="btn" type="submit">Apply</button>
+  </form>
+
+  <table>
+    <tr><th>Account</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">Variance</th></tr>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.account.code }} {{ r.account.name }}</td>
+      <td class="num">{{ r.budget_amount|floatformat:2 }}</td>
+      <td class="num">{{ r.actual|floatformat:2 }}</td>
+      <td class="num {% if r.variance >= 0 %}credit{% else %}debit{% endif %}">{{ r.variance|floatformat:2 }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="4" class="muted">No budgets set for this period.</td></tr>
+    {% endfor %}
+  </table>
+{% endblock %}

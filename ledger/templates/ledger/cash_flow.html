@@ -1,0 +1,30 @@
+{% extends 'ledger/base.html' %}
+{% block title %}Cash Flow{% endblock %}
+{% block content %}
+  <h1>Cash Flow Statement</h1>
+  <p class="sub">
+    Indirect method{% if data.start_date or data.end_date %} · {{ data.start_date|default:'beginning' }} → {{ data.end_date|default:'today' }}{% endif %}
+  </p>
+
+  <form method="get" class="filterbar">
+    <div class="form-row"><label>Start</label><input type="date" name="start" value="{{ start }}"></div>
+    <div class="form-row"><label>End</label><input type="date" name="end" value="{{ end }}"></div>
+    <button class="btn" type="submit">Apply</button>
+  </form>
+
+  <table>
+    <tr><th>Item</th><th class="num">Amount</th></tr>
+    <tr><td>Net income</td><td class="num">{{ data.net_income|floatformat:2 }}</td></tr>
+    <tr><td>Working capital change</td><td class="num">{{ data.working_capital_change|floatformat:2 }}</td></tr>
+    <tr><td><strong>Operating cash flow</strong></td><td class="num"><strong>{{ data.operating_cash_flow|floatformat:2 }}</strong></td></tr>
+    <tr><td><strong>Financing cash flow</strong></td><td class="num"><strong>{{ data.financing_cash_flow|floatformat:2 }}</strong></td></tr>
+    <tr><td><strong>Net change in cash</strong></td><td class="num"><strong>{{ data.net_change|floatformat:2 }}</strong></td></tr>
+    <tr><td>Actual change in cash accounts</td><td class="num">{{ data.actual_cash_change|floatformat:2 }}</td></tr>
+  </table>
+
+  {% if data.reconciled %}
+    <div class="balanced">✓ Reconciles with the cash accounts.</div>
+  {% else %}
+    <div class="unbalanced">⚠ Does not reconcile with the cash accounts.</div>
+  {% endif %}
+{% endblock %}

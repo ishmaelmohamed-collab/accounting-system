@@ -1,0 +1,24 @@
+{% extends 'ledger/base.html' %}
+{% block title %}Record Payment{% endblock %}
+{% block content %}
+  <h1>Record Payment</h1>
+  <p class="sub">Recording a payment automatically posts a balanced journal entry.</p>
+
+  <form method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="errors">{{ form.non_field_errors }}</div>{% endif %}
+
+    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); max-width: 960px;">
+      {% for field in form %}
+      <div class="form-row">
+        <label>{{ field.label }}</label>
+        {{ field }}
+        {% if field.help_text %}<div class="muted" style="font-size:12px; margin-top:4px;">{{ field.help_text }}</div>{% endif %}
+        {% if field.errors %}<div class="errorlist">{{ field.errors }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <button class="btn" type="submit">Record payment</button>
+  </form>
+{% endblock %}

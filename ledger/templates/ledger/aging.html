@@ -1,0 +1,27 @@
+{% extends 'ledger/base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+  <h1>{{ title }}</h1>
+  <p class="sub">Outstanding invoices bucketed by days overdue.</p>
+
+  <form method="get" class="filterbar">
+    <div class="form-row"><label>As of</label><input type="date" name="as_of" value="{{ as_of }}"></div>
+    <button class="btn" type="submit">Apply</button>
+  </form>
+
+  <table>
+    <tr><th>Party</th><th class="num">Current (0-30)</th><th class="num">31-60</th><th class="num">61-90</th><th class="num">90+</th><th class="num">Total</th></tr>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.party.name }}</td>
+      <td class="num">{{ r.current|floatformat:2 }}</td>
+      <td class="num">{{ r.b31_60|floatformat:2 }}</td>
+      <td class="num">{{ r.b61_90|floatformat:2 }}</td>
+      <td class="num">{{ r.b90_plus|floatformat:2 }}</td>
+      <td class="num"><strong>{{ r.total|floatformat:2 }}</strong></td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="6" class="muted">Nothing outstanding.</td></tr>
+    {% endfor %}
+  </table>
+{% endblock %}

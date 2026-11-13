@@ -1,0 +1,40 @@
+{% extends 'ledger/base.html' %}
+{% block title %}New Invoice{% endblock %}
+{% block content %}
+  <h1>New Invoice</h1>
+  <p class="sub">Creating an invoice automatically posts a balanced journal entry.</p>
+
+  <form method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="errors">{{ form.non_field_errors }}</div>{% endif %}
+
+    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); max-width: 960px;">
+      {% for field in form %}
+      <div class="form-row">
+        <label>{{ field.label }}</label>
+        {{ field }}
+        {% if field.errors %}<div class="errorlist">{{ field.errors }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <h2>Line items</h2>
+    {{ formset.management_form }}
+    {% if formset.non_form_errors %}<div class="errors">{{ formset.non_form_errors }}</div>{% endif %}
+    <table class="formset-table">
+      <tr><th>Description</th><th>Account</th><th>Qty</th><th>Unit price</th></tr>
+      {% for line_form in formset %}
+      <tr>
+        {% for field in line_form %}
+        <td>
+          {{ field }}
+          {% if field.errors %}<div class="errorlist">{{ field.errors }}</div>{% endif %}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </table>
+
+    <button class="btn" type="submit">Create invoice</button>
+  </form>
+{% endblock %}

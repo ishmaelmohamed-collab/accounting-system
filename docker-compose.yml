@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ${DB_NAME:-accounting}
+      POSTGRES_USER: ${DB_USER:-accounting_app}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Load the accounting schema on first startup (migrations only, not the tests)
+      - ./sql/001_core_schema.sql:/docker-entrypoint-initdb.d/001_core_schema.sql:ro
+      - ./sql/002_invoicing.sql:/docker-entrypoint-initdb.d/002_invoicing.sql:ro
+      - ./sql/003_ledger_hardening.sql:/docker-entrypoint-initdb.d/003_ledger_hardening.sql:ro
+      - ./sql/004_budgets.sql:/docker-entrypoint-initdb.d/004_budgets.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-accounting_app} -d ${DB_NAME:-accounting}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

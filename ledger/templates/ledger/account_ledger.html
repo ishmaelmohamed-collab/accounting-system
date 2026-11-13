@@ -1,0 +1,40 @@
+{% extends 'ledger/base.html' %}
+{% block title %}Account Ledger{% endblock %}
+{% block content %}
+  <h1>Account Ledger</h1>
+  <p class="sub">Running balance for a single account.</p>
+
+  <form method="get" class="filterbar">
+    <div class="form-row">
+      <label>Account</label>
+      <select name="account">
+        <option value="">-- select --</option>
+        {% for a in accounts %}
+        <option value="{{ a.code }}" {% if a.code == account_code %}selected{% endif %}>{{ a.code }} {{ a.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-row"><label>Start</label><input type="date" name="start" value="{{ start }}"></div>
+    <div class="form-row"><label>End</label><input type="date" name="end" value="{{ end }}"></div>
+    <button class="btn" type="submit">View</button>
+  </form>
+
+  {% if data %}
+  <table>
+    <tr><th>Date</th><th>Reference</th><th>Description</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th></tr>
+    {% for r in data.rows %}
+    <tr>
+      <td>{{ r.date }}</td>
+      <td>{{ r.reference }}</td>
+      <td>{{ r.description }}</td>
+      <td class="num debit">{{ r.debit|floatformat:2 }}</td>
+      <td class="num credit">{{ r.credit|floatformat:2 }}</td>
+      <td class="num"><strong>{{ r.balance|floatformat:2 }}</strong></td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="6" class="muted">No activity for this account.</td></tr>
+    {% endfor %}
+  </table>
+  <p class="sub">Closing balance: <strong>{{ data.closing_balance|floatformat:2 }}</strong></p>
+  {% endif %}
+{% endblock %}

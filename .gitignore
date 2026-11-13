@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Secrets — never commit these
+.env
+postgres-credentials.txt
+
+# Database / runtime artifacts
+db.sqlite3
+staticfiles/
+media/
+
+# IDE / editor
+.vscode/
+.idea/

@@ -1,0 +1,47 @@
+{% extends 'ledger/base.html' %}
+{% block title %}Party Statement{% endblock %}
+{% block content %}
+  <h1>Party Statement</h1>
+  <p class="sub">Invoices and payments for a customer or vendor.</p>
+
+  <form method="get" class="filterbar">
+    <div class="form-row">
+      <label>Party</label>
+      <select name="party">
+        <option value="">-- select --</option>
+        {% for p in parties %}
+        <option value="{{ p.id }}" {% if p.id|stringformat:"s" == party_id %}selected{% endif %}>{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-row"><label>Start</label><input type="date" name="start" value="{{ start }}"></div>
+    <div class="form-row"><label>End</label><input type="date" name="end" value="{{ end }}"></div>
+    <button class="btn" type="submit">View</button>
+  </form>
+
+  {% if data %}
+  <h2>Invoices</h2>
+  <table>
+    <tr><th>Number</th><th>Date</th><th>Type</th><th class="num">Total</th><th>Status</th></tr>
+    {% for i in data.invoices %}
+    <tr><td>{{ i.invoice_number }}</td><td>{{ i.issue_date }}</td><td>{{ i.invoice_type }}</td><td class="num">{{ i.total|floatformat:2 }}</td><td>{{ i.status }}</td></tr>
+    {% empty %}
+    <tr><td colspan="5" class="muted">No invoices.</td></tr>
+    {% endfor %}
+  </table>
+
+  <h2>Payments</h2>
+  <table>
+    <tr><th>Date</th><th>Direction</th><th>Method</th><th class="num">Amount</th></tr>
+    {% for p in data.payments %}
+    <tr><td>{{ p.payment_date }}</td><td>{{ p.direction }}</td><td>{{ p.method }}</td><td class="num">{{ p.amount|floatformat:2 }}</td></tr>
+    {% empty %}
+    <tr><td colspan="4" class="muted">No payments.</td></tr>
+    {% endfor %}
+  </table>
+
+  <div class="grid" style="max-width: 400px;">
+    <div class="card"><div class="num">{{ data.balance|floatformat:2 }}</div><div class="label">Balance (positive = they owe us)</div></div>
+  </div>
+  {% endif %}
+{% endblock %}

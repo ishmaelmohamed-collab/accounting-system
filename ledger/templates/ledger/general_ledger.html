@@ -1,0 +1,31 @@
+{% extends 'ledger/base.html' %}
+{% block title %}General Ledger{% endblock %}
+{% block content %}
+  <h1>General Ledger</h1>
+  <p class="sub">All posted journal entries in chronological order.</p>
+
+  <form method="get" class="filterbar">
+    <div class="form-row"><label>Start</label><input type="date" name="start" value="{{ start }}"></div>
+    <div class="form-row"><label>End</label><input type="date" name="end" value="{{ end }}"></div>
+    <button class="btn" type="submit">Apply</button>
+  </form>
+
+  {% for row in rows %}
+  <table>
+    <tr><th colspan="3">{{ row.entry.entry_date }} · {{ row.entry.reference }} · {{ row.entry.description }}</th></tr>
+    <tr><th>Account</th><th class="num">Debit</th><th class="num">Credit</th></tr>
+    {% for l in row.lines %}
+    <tr>
+      <td>{{ l.account.code }} {{ l.account.name }}</td>
+      {% if l.line_type == 'debit' %}
+        <td class="num debit">{{ l.amount|floatformat:2 }}</td><td class="num"></td>
+      {% else %}
+        <td class="num"></td><td class="num credit">{{ l.amount|floatformat:2 }}</td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+  </table>
+  {% empty %}
+  <div class="muted">No entries in this period.</div>
+  {% endfor %}
+{% endblock %}

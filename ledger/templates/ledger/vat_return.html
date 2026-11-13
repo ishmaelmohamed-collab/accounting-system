@@ -1,0 +1,19 @@
+{% extends 'ledger/base.html' %}
+{% block title %}VAT Return{% endblock %}
+{% block content %}
+  <h1>VAT Return</h1>
+  <p class="sub">Output VAT (sales) minus input VAT (purchases).</p>
+
+  <form method="get" class="filterbar">
+    <div class="form-row"><label>Start</label><input type="date" name="start" value="{{ start }}"></div>
+    <div class="form-row"><label>End</label><input type="date" name="end" value="{{ end }}"></div>
+    <button class="btn" type="submit">Apply</button>
+  </form>
+
+  <table>
+    <tr><th>Item</th><th class="num">Amount</th></tr>
+    <tr><td>Output VAT (on sales)</td><td class="num credit">{{ data.output_vat|floatformat:2 }}</td></tr>
+    <tr><td>Input VAT (on purchases)</td><td class="num debit">{{ data.input_vat|floatformat:2 }}</td></tr>
+    <tr><td><strong>Net VAT payable</strong></td><td class="num"><strong>{{ data.net_vat|floatformat:2 }}</strong></td></tr>
+  </table>
+{% endblock %}

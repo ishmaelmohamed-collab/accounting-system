@@ -1,0 +1,64 @@
+{% extends 'ledger/base.html' %}
+{% block title %}Dashboard — Accounting System{% endblock %}
+{% block content %}
+  <h1>Accounting System</h1>
+  <div class="sub">Double-entry bookkeeping foundation &middot; PostgreSQL 17 &middot; Django 6.1</div>
+
+  <div class="grid">
+    <div class="card"><div class="num">{{ account_count }}</div><div class="label">Accounts</div></div>
+    <div class="card"><div class="num">{{ entry_count }}</div><div class="label">Journal Entries</div></div>
+    <div class="card"><div class="num">{{ party_count }}</div><div class="label">Parties</div></div>
+    <div class="card"><div class="num">{{ invoice_count }}</div><div class="label">Invoices</div></div>
+    <div class="card"><div class="num">{{ payment_count }}</div><div class="label">Payments</div></div>
+    <div class="card"><div class="num">{{ tax_rate_count }}</div><div class="label">Tax Rates</div></div>
+  </div>
+
+  <h2>Trial Balance</h2>
+  <table>
+    <tr><th>Code</th><th>Account</th><th>Type</th><th class="num">Debit</th><th class="num">Credit</th></tr>
+    {% for b in trial_balance %}
+    <tr>
+      <td>{{ b.code }}</td>
+      <td>{{ b.name }}</td>
+      <td><span class="badge {{ b.type }}">{{ b.type|title }}</span></td>
+      <td class="num debit">{{ b.debit }}</td>
+      <td class="num credit">{{ b.credit }}</td>
+    </tr>
+    {% endfor %}
+    <tr>
+      <td colspan="3"><strong>Total</strong></td>
+      <td class="num"><strong>{{ total_debit }}</strong></td>
+      <td class="num"><strong>{{ total_credit }}</strong></td>
+    </tr>
+  </table>
+  {% if balanced %}
+    <div class="balanced">✓ Debits = Credits — the ledger is balanced.</div>
+  {% else %}
+    <div class="unbalanced">⚠ The ledger is out of balance.</div>
+  {% endif %}
+
+  <h2>Chart of Accounts</h2>
+  <table>
+    <tr><th>Code</th><th>Name</th><th>Type</th><th>Normal Balance</th></tr>
+    {% for a in accounts %}
+    <tr>
+      <td>{{ a.code }}</td>
+      <td>{{ a.name }}</td>
+      <td><span class="badge {{ a.type }}">{{ a.get_type_display }}</span></td>
+      <td class="{{ a.normal_balance }}">{{ a.get_normal_balance_display }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <h2>Tax Rates</h2>
+  <table>
+    <tr><th>Name</th><th>Rate</th><th>Active</th></tr>
+    {% for t in tax_rates %}
+    <tr>
+      <td>{{ t.name }}</td>
+      <td>{{ t.rate }}%</td>
+      <td>{% if t.is_active %}✓{% else %}—{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+{% endblock %}
