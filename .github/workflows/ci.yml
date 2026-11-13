@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: accounting_app
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: accounting
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U accounting_app"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Load schema
+        working-directory: backend
+        env:
+          PGPASSWORD: testpass
+        run: |
+          for f in ../sql/001_core_schema.sql ../sql/002_invoicing.sql ../sql/003_ledger_hardening.sql ../sql/004_budgets.sql ../sql/005_users.sql; do
+            psql -h localhost -U accounting_app -d accounting -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      - name: Typecheck
+        working-directory: backend
+        run: npm run typecheck
+
+      - name: Test
+        working-directory: backend
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: accounting_app
+          DB_PASSWORD: testpass
+          DB_NAME: accounting
+          SESSION_SECRET: test-secret
+        run: npm test

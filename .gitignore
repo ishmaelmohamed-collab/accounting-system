@@ -5,6 +5,10 @@ __pycache__/
 .venv/
 venv/
 
+# Node.js
+node_modules/
+dist/
+
 # Secrets — never commit these
 .env
 postgres-credentials.txt
