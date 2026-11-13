@@ -20,6 +20,7 @@ export const journalLineSchema = z.object({
   lineType: z.enum(['debit', 'credit']),
   amount: z.union([z.string(), z.number()]),
   partyId: z.number().nullable().optional(),
+  departmentId: z.number().int().positive().nullable().optional(),
 });
 
 export const postEntrySchema = z.object({
@@ -73,4 +74,17 @@ export const partySchema = z.object({
 
 export const reverseEntrySchema = z.object({
   entryId: z.number().int().positive(),
+});
+
+export const departmentSchema = z.object({
+  name: z.string().min(1),
+});
+
+export const fixedAssetSchema = z.object({
+  name: z.string().min(1),
+  accountId: z.number().int().positive(),
+  purchaseDate: z.string().min(1),
+  cost: z.union([z.string(), z.number()]),
+  salvageValue: z.union([z.string(), z.number()]).optional().default('0'),
+  usefulLifeYears: z.number().int().positive(),
 });

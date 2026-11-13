@@ -299,3 +299,120 @@ export async function financialRatios(asOfDate?: string): Promise<any> {
     returnOnEquity: bs.totalEquity.isZero() ? null : netIncome.div(bs.totalEquity),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Depth reports
+// ---------------------------------------------------------------------------
+
+export async function profitAndLossByDepartment(startDate?: string, endDate?: string): Promise<any[]> {
+  let sql = `
+    SELECT d.id, d.name,
+           COALESCE(SUM(l.amount) FILTER (WHERE l.line_type = 'credit' AND a.type = 'revenue'), 0) -
+           COALESCE(SUM(l.amount) FILTER (WHERE l.line_type = 'debit' AND a.type = 'revenue'), 0) AS revenue,
+           COALESCE(SUM(l.amount) FILTER (WHERE l.line_type = 'debit' AND a.type = 'expense'), 0) -
+           COALESCE(SUM(l.amount) FILTER (WHERE l.line_type = 'credit' AND a.type = 'expense'), 0) AS expense
+    FROM journal_entry_lines l
+    JOIN journal_entries je ON je.id = l.journal_entry_id
+    JOIN accounts a ON a.id = l.account_id
+    JOIN departments d ON d.id = l.department_id
+    WHERE je.status = 'posted'`;
+  const params: string[] = [];
+  if (startDate) { params.push(startDate); sql += ` AND je.entry_date >= $${params.length}::date`; }
+  if (endDate) { params.push(endDate); sql += ` AND je.entry_date <= $${params.length}::date`; }
+  sql += ' GROUP BY d.id, d.name ORDER BY d.name';
+  const { rows } = await query(sql, params);
+  return rows.map((r) => {
+    const revenue = money(r.revenue);
+    const expense = money(r.expense);
+    return { department: r.name, revenue, expense, netIncome: revenue.minus(expense) };
+  });
+}
+
+export async function fixedAssetRegister(asOfDate?: string): Promise<any> {
+  const asOf = asOfDate || new Date().toISOString().slice(0, 10);
+  const { rows } = await query(
+    `SELECT fa.*, a.code AS account_code, a.name AS account_name
+     FROM fixed_assets fa JOIN accounts a ON a.id = fa.account_id
+     ORDER BY fa.purchase_date, fa.id`,
+  );
+  const msPerYear = 365.25 * 86400000;
+  const assets = rows.map((fa) => {
+    const cost = money(fa.cost);
+    const salvage = money(fa.salvage_value);
+    const lifeYears = Number(fa.useful_life_years);
+    const annualDepreciation = cost.minus(salvage).div(lifeYears).toDecimalPlaces(2);
+    const elapsedYears = Math.max(0, (new Date(asOf).getTime() - new Date(fa.purchase_date).getTime()) / msPerYear);
+    const accumulated = annualDepreciation.times(Math.min(elapsedYears, lifeYears)).toDecimalPlaces(2);
+    return {
+      id: fa.id,
+      name: fa.name,
+      accountCode: fa.account_code,
+      accountName: fa.account_name,
+      purchaseDate: fa.purchase_date,
+      cost,
+      salvageValue: salvage,
+      usefulLifeYears: lifeYears,
+      annualDepreciation,
+      accumulatedDepreciation: accumulated,
+      netBookValue: cost.minus(accumulated).toDecimalPlaces(2),
+    };
+  });
+  return {
+    assets,
+    totalCost: assets.reduce((s, r) => s.plus(r.cost), money(0)),
+    totalAccumulated: assets.reduce((s, r) => s.plus(r.accumulatedDepreciation), money(0)),
+    totalNetBookValue: assets.reduce((s, r) => s.plus(r.netBookValue), money(0)),
+  };
+}
+
+export async function comparativeProfitAndLoss(currentStart: string, currentEnd: string): Promise<any> {
+  const current = await profitAndLoss(currentStart, currentEnd);
+  const curStart = new Date(currentStart);
+  const curEnd = new Date(currentEnd);
+  const lengthMs = curEnd.getTime() - curStart.getTime();
+  const priorEnd = new Date(curStart.getTime() - 1);
+  const priorStart = new Date(priorEnd.getTime() - lengthMs);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const prior = await profitAndLoss(fmt(priorStart), fmt(priorEnd));
+
+  return {
+    currentStart, currentEnd,
+    priorStart: fmt(priorStart), priorEnd: fmt(priorEnd),
+    currentRevenue: current.totalRevenue, priorRevenue: prior.totalRevenue,
+    currentExpense: current.totalExpense, priorExpense: prior.totalExpense,
+    currentNetIncome: current.netIncome, priorNetIncome: prior.netIncome,
+    revenueVariance: current.totalRevenue.minus(prior.totalRevenue),
+    expenseVariance: current.totalExpense.minus(prior.totalExpense),
+    netIncomeVariance: current.netIncome.minus(prior.netIncome),
+  };
+}
+
+export async function changesInEquity(startDate?: string, endDate?: string): Promise<any> {
+  const startBoundary = startDate ? new Date(new Date(startDate).getTime() - 86400000).toISOString().slice(0, 10) : undefined;
+  const balancesStart = startBoundary ? await accountBalances(undefined, startBoundary) : {};
+  const balancesEnd = await accountBalances(undefined, endDate);
+
+  const equityBalance = async (balances: Record<number, { debit: any; credit: any }>): Promise<any> => {
+    const { rows } = await query("SELECT id FROM accounts WHERE type = 'equity'");
+    let total = money(0);
+    for (const a of rows) {
+      const b = balances[a.id] || { debit: money(0), credit: money(0) };
+      total = total.plus(b.credit.minus(b.debit));
+    }
+    return total;
+  };
+
+  const openingEquity = await equityBalance(balancesStart);
+  const closingEquityBeforeNI = await equityBalance(balancesEnd);
+  const netIncome = (await profitAndLoss(startDate, endDate)).netIncome;
+  const capitalMovements = closingEquityBeforeNI.minus(openingEquity);
+  const closingEquity = closingEquityBeforeNI.plus(netIncome);
+
+  return {
+    openingEquity,
+    capitalMovements,
+    netIncome,
+    closingEquity,
+    reconciled: openingEquity.plus(capitalMovements).plus(netIncome).minus(closingEquity).abs().lessThan(0.01),
+  };
+}

@@ -17,6 +17,7 @@ export interface JournalLineInput {
   lineType: LineType;
   amount: string | number;
   partyId?: number | null;
+  departmentId?: number | null;
 }
 
 export interface PostEntryArgs {

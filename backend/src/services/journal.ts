@@ -68,8 +68,8 @@ async function _postJournalEntry(args: PostEntryArgs, client: any): Promise<any>
     const acct = await getAccountByCode(line.accountCode, client);
     if (!acct) throw new Error(`Account not found: ${line.accountCode}`);
     await client.query(
-      'INSERT INTO journal_entry_lines (journal_entry_id, account_id, line_type, amount, line_no, party_id) VALUES ($1, $2, $3, $4, $5, $6)',
-      [entryId, acct.id, line.lineType, line.amount, i + 1, line.partyId || null],
+      'INSERT INTO journal_entry_lines (journal_entry_id, account_id, line_type, amount, line_no, party_id, department_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [entryId, acct.id, line.lineType, line.amount, i + 1, line.partyId || null, line.departmentId || null],
     );
   }
 

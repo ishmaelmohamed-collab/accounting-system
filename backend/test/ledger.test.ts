@@ -93,3 +93,30 @@ describe('validation (Zod)', () => {
     expect(r.success).toBe(false);
   });
 });
+
+describe('depth reports (departments, assets, comparative, equity)', () => {
+  it('P&L by department returns an array', async () => {
+    const rows = await reports.profitAndLossByDepartment();
+    expect(Array.isArray(rows)).toBe(true);
+  });
+
+  it('fixed asset register returns totals', async () => {
+    const d = await reports.fixedAssetRegister();
+    expect(d.totalCost).toBeDefined();
+    expect(d.totalAccumulated).toBeDefined();
+    expect(d.totalNetBookValue).toBeDefined();
+  });
+
+  it('comparative P&L returns current vs prior net income', async () => {
+    const d = await reports.comparativeProfitAndLoss('2026-01-01', '2026-11-13');
+    expect(d.currentNetIncome).toBeDefined();
+    expect(d.priorNetIncome).toBeDefined();
+    expect(d.netIncomeVariance).toBeDefined();
+  });
+
+  it('statement of changes in equity reconciles', async () => {
+    const d = await reports.changesInEquity();
+    expect(typeof d.reconciled).toBe('boolean');
+    expect(d.closingEquity).toBeDefined();
+  });
+});

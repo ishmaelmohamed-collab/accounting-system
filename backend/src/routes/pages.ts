@@ -84,6 +84,10 @@ router.get('/', async (req, res, next) => {
         <a href="/reports/account-ledger">Account</a>
         <a href="/reports/party-statement">Party</a>
         <a href="/reports/financial-ratios">Ratios</a>
+        <a href="/reports/by-department">By Dept</a>
+        <a href="/reports/fixed-assets">Assets</a>
+        <a href="/reports/comparative-pl">Compare</a>
+        <a href="/reports/equity-changes">Equity</a>
         <a href="/logout">Logout (${(req as any).session.username})</a>
       </div>
       <div>
@@ -234,6 +238,47 @@ router.get('/reports/financial-ratios', async (req, res, next) => {
       <tr><td>Net Margin</td><td class="num">${pct(d.netMargin)}</td></tr>
       <tr><td>Current Ratio</td><td class="num">${ratio(d.currentRatio)}</td></tr>
       <tr><td>Return on Equity</td><td class="num">${pct(d.returnOnEquity)}</td></tr></table>`));
+  } catch (e) { next(e); }
+});
+
+router.get('/reports/by-department', async (req, res, next) => {
+  try {
+    const rows = await reports.profitAndLossByDepartment(req.query.start as string, req.query.end as string);
+    const html = rows.map((r: any) => `<tr><td>${r.department}</td><td class="num">${r.revenue.toFixed(2)}</td><td class="num">${r.expense.toFixed(2)}</td><td class="num"><b>${r.netIncome.toFixed(2)}</b></td></tr>`).join('');
+    res.send(reportPage('P&L by Department', `<table><tr><th>Department</th><th class="num">Revenue</th><th class="num">Expense</th><th class="num">Net Income</th></tr>${html || '<tr><td colspan="4">No departmental data — tag journal lines with a department</td></tr>'}</table>`));
+  } catch (e) { next(e); }
+});
+
+router.get('/reports/fixed-assets', async (req, res, next) => {
+  try {
+    const d = await reports.fixedAssetRegister(req.query.as_of as string);
+    const html = d.assets.map((r: any) => `<tr><td>${r.name}</td><td>${r.accountCode} ${r.accountName}</td><td>${r.purchaseDate}</td><td class="num">${r.cost.toFixed(2)}</td><td class="num">${r.annualDepreciation.toFixed(2)}</td><td class="num">${r.accumulatedDepreciation.toFixed(2)}</td><td class="num"><b>${r.netBookValue.toFixed(2)}</b></td></tr>`).join('');
+    res.send(reportPage('Fixed Asset Register', `<table><tr><th>Asset</th><th>Account</th><th>Purchased</th><th class="num">Cost</th><th class="num">Annual Dep.</th><th class="num">Accum. Dep.</th><th class="num">Net Book Value</th></tr>${html || '<tr><td colspan="7">No fixed assets</td></tr>'}<tr><td colspan="3"><b>Total</b></td><td class="num"><b>${d.totalCost.toFixed(2)}</b></td><td></td><td class="num"><b>${d.totalAccumulated.toFixed(2)}</b></td><td class="num"><b>${d.totalNetBookValue.toFixed(2)}</b></td></tr></table>`));
+  } catch (e) { next(e); }
+});
+
+router.get('/reports/comparative-pl', async (req, res, next) => {
+  try {
+    const start = (req.query.start as string) || '2026-01-01';
+    const end = (req.query.end as string) || new Date().toISOString().slice(0, 10);
+    const d = await reports.comparativeProfitAndLoss(start, end);
+    res.send(reportPage('Comparative P&L', `<p>Current: ${d.currentStart} → ${d.currentEnd} &nbsp;|&nbsp; Prior: ${d.priorStart} → ${d.priorEnd}</p>
+      <table><tr><th>Metric</th><th class="num">Current</th><th class="num">Prior</th><th class="num">Variance</th></tr>
+      <tr><td>Revenue</td><td class="num">${d.currentRevenue.toFixed(2)}</td><td class="num">${d.priorRevenue.toFixed(2)}</td><td class="num">${d.revenueVariance.toFixed(2)}</td></tr>
+      <tr><td>Expenses</td><td class="num">${d.currentExpense.toFixed(2)}</td><td class="num">${d.priorExpense.toFixed(2)}</td><td class="num">${d.expenseVariance.toFixed(2)}</td></tr>
+      <tr><td><b>Net Income</b></td><td class="num"><b>${d.currentNetIncome.toFixed(2)}</b></td><td class="num"><b>${d.priorNetIncome.toFixed(2)}</b></td><td class="num"><b>${d.netIncomeVariance.toFixed(2)}</b></td></tr></table>`));
+  } catch (e) { next(e); }
+});
+
+router.get('/reports/equity-changes', async (req, res, next) => {
+  try {
+    const d = await reports.changesInEquity(req.query.start as string, req.query.end as string);
+    res.send(reportPage('Statement of Changes in Equity', `<table><tr><th>Item</th><th class="num">Amount</th></tr>
+      <tr><td>Opening equity</td><td class="num">${d.openingEquity.toFixed(2)}</td></tr>
+      <tr><td>Capital movements</td><td class="num">${d.capitalMovements.toFixed(2)}</td></tr>
+      <tr><td>Net income for period</td><td class="num">${d.netIncome.toFixed(2)}</td></tr>
+      <tr><td><b>Closing equity</b></td><td class="num"><b>${d.closingEquity.toFixed(2)}</b></td></tr></table>
+      <p class="${d.reconciled ? 'ok' : 'bad'}">${d.reconciled ? '✓ Reconciles' : '⚠ Does not reconcile'}</p>`));
   } catch (e) { next(e); }
 });
 

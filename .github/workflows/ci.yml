@@ -44,7 +44,7 @@ jobs:
         env:
           PGPASSWORD: testpass
         run: |
-          for f in ../sql/001_core_schema.sql ../sql/002_invoicing.sql ../sql/003_ledger_hardening.sql ../sql/004_budgets.sql ../sql/005_users.sql; do
+          for f in ../sql/001_core_schema.sql ../sql/002_invoicing.sql ../sql/003_ledger_hardening.sql ../sql/004_budgets.sql ../sql/005_users.sql ../sql/006_departments_fixed_assets.sql; do
             psql -h localhost -U accounting_app -d accounting -v ON_ERROR_STOP=1 -f "$f"
           done
 

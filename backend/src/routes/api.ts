@@ -5,7 +5,7 @@ import * as journal from '../services/journal';
 import { createInvoice } from '../services/invoice';
 import { recordPayment } from '../services/payment';
 import * as reports from '../reports';
-import { validate, postEntrySchema, createInvoiceSchema, recordPaymentSchema, partySchema, reverseEntrySchema } from '../validation';
+import { validate, postEntrySchema, createInvoiceSchema, recordPaymentSchema, partySchema, reverseEntrySchema, departmentSchema, fixedAssetSchema } from '../validation';
 
 const router = express.Router();
 router.use(requireAuth);
@@ -117,6 +117,50 @@ router.get('/reports/party-statement', async (req, res, next) => {
 });
 router.get('/reports/financial-ratios', async (req, res, next) => {
   try { res.json(await reports.financialRatios(req.query.as_of as string)); } catch (e) { next(e); }
+});
+
+router.get('/departments', async (req, res, next) => {
+  try { res.json((await query('SELECT * FROM departments ORDER BY name')).rows); } catch (e) { next(e); }
+});
+
+router.post('/departments', validate(departmentSchema), async (req, res, next) => {
+  try {
+    const { name } = req.body;
+    const r = await query('INSERT INTO departments (name) VALUES ($1) RETURNING *', [name]);
+    res.status(201).json(r.rows[0]);
+  } catch (e) { next(e); }
+});
+
+router.get('/fixed-assets', async (req, res, next) => {
+  try { res.json((await query('SELECT * FROM fixed_assets ORDER BY purchase_date, id')).rows); } catch (e) { next(e); }
+});
+
+router.post('/fixed-assets', validate(fixedAssetSchema), async (req, res, next) => {
+  try {
+    const { name, accountId, purchaseDate, cost, salvageValue, usefulLifeYears } = req.body;
+    const r = await query(
+      'INSERT INTO fixed_assets (name, account_id, purchase_date, cost, salvage_value, useful_life_years) VALUES ($1,$2,$3::date,$4,$5,$6) RETURNING *',
+      [name, accountId, purchaseDate, cost, salvageValue, usefulLifeYears],
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (e) { next(e); }
+});
+
+router.get('/reports/profit-and-loss-by-department', async (req, res, next) => {
+  try { res.json(await reports.profitAndLossByDepartment(req.query.start as string, req.query.end as string)); } catch (e) { next(e); }
+});
+router.get('/reports/fixed-asset-register', async (req, res, next) => {
+  try { res.json(await reports.fixedAssetRegister(req.query.as_of as string)); } catch (e) { next(e); }
+});
+router.get('/reports/comparative-profit-and-loss', async (req, res, next) => {
+  try {
+    const start = (req.query.start as string) || '2026-01-01';
+    const end = (req.query.end as string) || new Date().toISOString().slice(0, 10);
+    res.json(await reports.comparativeProfitAndLoss(start, end));
+  } catch (e) { next(e); }
+});
+router.get('/reports/changes-in-equity', async (req, res, next) => {
+  try { res.json(await reports.changesInEquity(req.query.start as string, req.query.end as string)); } catch (e) { next(e); }
 });
 
 export default router;
