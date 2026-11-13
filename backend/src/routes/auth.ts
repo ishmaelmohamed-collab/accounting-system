@@ -11,7 +11,7 @@ router.post('/login', async (req, res, next) => {
       return res.status(400).json({ error: 'username and password required' });
     }
     const { rows } = await query(
-      'SELECT id, username, password_hash FROM users WHERE username = $1',
+      'SELECT id, username, password_hash, role FROM users WHERE username = $1',
       [username],
     );
     const user = rows[0];
@@ -20,7 +20,8 @@ router.post('/login', async (req, res, next) => {
     }
     (req as any).session.userId = user.id;
     (req as any).session.username = user.username;
-    return res.json({ ok: true, username: user.username });
+    (req as any).session.role = user.role;
+    return res.json({ ok: true, username: user.username, role: user.role });
   } catch (err) {
     return next(err);
   }

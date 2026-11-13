@@ -26,6 +26,7 @@ export interface PostEntryArgs {
   description?: string;
   lines: JournalLineInput[];
   idempotencyKey?: string | null;
+  status?: 'draft' | 'posted';
 }
 
 export interface InvoiceLineInput {
@@ -37,7 +38,7 @@ export interface InvoiceLineInput {
 }
 
 export interface CreateInvoiceArgs {
-  invoiceNumber: string;
+  invoiceNumber?: string | null;
   partyId: number;
   invoiceType: InvoiceType;
   issueDate: string;

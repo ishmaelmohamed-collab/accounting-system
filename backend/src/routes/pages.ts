@@ -38,13 +38,14 @@ router.get('/login', (req, res) => {
 router.post('/login', async (req, res, next) => {
   try {
     const { username, password } = req.body || {};
-    const { rows } = await query('SELECT id, username, password_hash FROM users WHERE username = $1', [username]);
+    const { rows } = await query('SELECT id, username, password_hash, role FROM users WHERE username = $1', [username]);
     const user = rows[0];
     if (!user || !(await verifyPassword(password, user.password_hash))) {
       return res.send(loginForm('Invalid username or password'));
     }
     (req as any).session.userId = user.id;
     (req as any).session.username = user.username;
+    (req as any).session.role = user.role;
     return res.redirect('/');
   } catch (e) { return next(e); }
 });
@@ -93,6 +94,9 @@ router.get('/', async (req, res, next) => {
         <a href="/reports/bank-reconciliation">Bank Rec</a>
         <a href="/recurring-entries">Recurring</a>
         <a href="/year-end-close">Year-End</a>
+        <a href="/orders">Orders</a>
+        <a href="/credit-notes">Notes</a>
+        <a href="/audit-log">Audit</a>
         <a href="/logout">Logout (${(req as any).session.username})</a>
       </div>
       <div>
@@ -332,6 +336,9 @@ router.get('/year-end-close', async (req, res, next) => {
 });
 
 router.post('/year-end-close', async (req, res, next) => {
+  if ((req as any).session.role !== 'admin') {
+    return res.send(reportPage('Year-End Close', '<p class="bad">Only admins can close the year.</p><a href="/year-end-close">← Back</a>'));
+  }
   try {
     const year = Number(req.body.year);
     await closeYear(year);
@@ -339,6 +346,30 @@ router.post('/year-end-close', async (req, res, next) => {
   } catch (e: any) {
     return res.send(reportPage('Year-End Close', `<p class="bad">${e.message}</p><a href="/year-end-close">← Back</a>`));
   }
+});
+
+router.get('/orders', async (req, res, next) => {
+  try {
+    const rows = (await query('SELECT * FROM orders ORDER BY order_date DESC, id DESC')).rows;
+    const html = rows.map((r: any) => `<tr><td>${r.order_number}</td><td>${r.order_type}</td><td>${r.order_date}</td><td>${r.status}</td><td class="num">${r.total}</td></tr>`).join('');
+    res.send(reportPage('Orders', `<p>Create via <code>POST /api/orders</code>, convert to invoice via <code>POST /api/actions/convert-order</code>.</p><table><tr><th>Number</th><th>Type</th><th>Date</th><th>Status</th><th class="num">Total</th></tr>${html || '<tr><td colspan="5">No orders</td></tr>'}</table>`));
+  } catch (e) { next(e); }
+});
+
+router.get('/credit-notes', async (req, res, next) => {
+  try {
+    const rows = (await query('SELECT * FROM credit_notes ORDER BY issue_date DESC, id DESC')).rows;
+    const html = rows.map((r: any) => `<tr><td>${r.note_number}</td><td>${r.note_type}</td><td>${r.issue_date}</td><td>${r.reason || ''}</td><td class="num">${r.total}</td></tr>`).join('');
+    res.send(reportPage('Credit / Debit Notes', `<p>Create via <code>POST /api/credit-notes</code>.</p><table><tr><th>Number</th><th>Type</th><th>Date</th><th>Reason</th><th class="num">Total</th></tr>${html || '<tr><td colspan="5">No notes</td></tr>'}</table>`));
+  } catch (e) { next(e); }
+});
+
+router.get('/audit-log', async (req, res, next) => {
+  try {
+    const rows = (await query('SELECT * FROM audit_log ORDER BY created_at DESC, id DESC LIMIT 200')).rows;
+    const html = rows.map((r: any) => `<tr><td>${r.created_at}</td><td>${r.username || ''}</td><td>${r.action}</td><td>${r.entity_type}${r.entity_id ? ' #' + r.entity_id : ''}</td></tr>`).join('');
+    res.send(reportPage('Audit Log', `<table><tr><th>When</th><th>User</th><th>Action</th><th>Entity</th></tr>${html || '<tr><td colspan="4">No activity yet</td></tr>'}</table>`));
+  } catch (e) { next(e); }
 });
 
 export default router;

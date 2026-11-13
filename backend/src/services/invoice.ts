@@ -2,9 +2,11 @@ import { query, withTransaction } from '../db';
 import { money } from '../money';
 import { CreateInvoiceArgs } from '../types';
 import { postJournalEntry, getAccountByCode, CODES } from './journal';
+import { nextNumber } from '../numbering';
 
-async function _createInvoice(args: CreateInvoiceArgs, client: any): Promise<any> {
-  const { invoiceNumber, partyId, invoiceType, issueDate, dueDate, lines, taxRateId = null } = args;
+export async function _createInvoice(args: CreateInvoiceArgs, client: any): Promise<any> {
+  const { partyId, invoiceType, issueDate, dueDate, lines, taxRateId = null } = args;
+  const invoiceNumber = args.invoiceNumber || await nextNumber(client, 'invoice');
 
   const subtotal = lines.reduce((s, l) => s.plus(money(l.amount)), money(0));
   if (!subtotal.isPositive()) throw new Error('Invoice subtotal must be positive.');

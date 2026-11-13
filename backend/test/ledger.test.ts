@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { money } from '../src/money';
 import * as journal from '../src/services/journal';
 import * as reports from '../src/reports';
-import { postEntrySchema, createInvoiceSchema } from '../src/validation';
+import { postEntrySchema, createInvoiceSchema, noteSchema, orderSchema } from '../src/validation';
 
 describe('money (decimal.js precision)', () => {
   it('adds decimals exactly (0.1 + 0.2 = 0.3)', () => {
@@ -90,6 +90,16 @@ describe('validation (Zod)', () => {
       issueDate: '2026-11-13', dueDate: '2026-12-13',
       lines: [{ description: 'd', accountCode: '4000', amount: '100' }],
     });
+    expect(r.success).toBe(false);
+  });
+
+  it('rejects a note with an invalid type', () => {
+    const r = noteSchema.safeParse({ partyId: 2, noteType: 'invalid', issueDate: '2026-11-13', subtotal: '100' });
+    expect(r.success).toBe(false);
+  });
+
+  it('rejects an order with no lines', () => {
+    const r = orderSchema.safeParse({ orderType: 'sale', partyId: 2, orderDate: '2026-11-13', lines: [] });
     expect(r.success).toBe(false);
   });
 });

@@ -1,16 +1,30 @@
 import express from 'express';
 import { query } from '../db';
-import { requireAuth } from '../auth';
+import { requireAuth, requireRole } from '../auth';
+import { logAudit } from '../audit';
 import * as journal from '../services/journal';
 import { createInvoice } from '../services/invoice';
 import { recordPayment } from '../services/payment';
 import { createRecurringEntry, processRecurringEntries } from '../services/recurring';
 import { closeYear } from '../services/yearEnd';
+import { createNote } from '../services/notes';
+import { createOrder, convertOrderToInvoice } from '../services/orders';
+import { disposeAsset } from '../services/assets';
 import * as reports from '../reports';
-import { validate, postEntrySchema, createInvoiceSchema, recordPaymentSchema, partySchema, reverseEntrySchema, departmentSchema, fixedAssetSchema, inventoryItemSchema, stockMovementSchema, bankTransactionSchema, recurringEntrySchema, closeYearSchema } from '../validation';
+import { validate, postEntrySchema, createInvoiceSchema, recordPaymentSchema, partySchema, reverseEntrySchema, departmentSchema, fixedAssetSchema, inventoryItemSchema, stockMovementSchema, bankTransactionSchema, recurringEntrySchema, closeYearSchema, noteSchema, orderSchema, disposeAssetSchema, approveEntrySchema } from '../validation';
 
 const router = express.Router();
 router.use(requireAuth);
+
+// Non-GET requests require an admin or accountant role
+router.use((req, res, next) => {
+  if (req.method !== 'GET') return requireRole('admin', 'accountant')(req, res, next);
+  return next();
+});
+
+function audit(req: any, action: string, entityType: string, entityId?: number, details?: any): Promise<void> {
+  return logAudit(req.session?.userId, req.session?.username, action, entityType, entityId, details);
+}
 
 function handleError(res: express.Response, err: any): express.Response {
   const status = /balanced|closed|positive|not found|reversed|posted|no lines|zero|required/i.test(err.message) ? 400 : 500;
@@ -52,6 +66,7 @@ router.get('/payments', async (req, res, next) => {
 router.post('/actions/post-entry', validate(postEntrySchema), async (req, res, next) => {
   try {
     const entry = await journal.postJournalEntry(req.body || {});
+    await audit(req, 'post_entry', 'journal_entry', entry.id, { reference: entry.reference });
     res.status(201).json(entry);
   } catch (e) { handleError(res, e); }
 });
@@ -74,6 +89,7 @@ router.post('/actions/reverse-entry', validate(reverseEntrySchema), async (req, 
   try {
     const { entryId } = req.body || {};
     const result = await journal.reverseEntry(entryId);
+    await audit(req, 'reverse_entry', 'journal_entry', result.id, { reversed: entryId });
     res.status(201).json(result);
   } catch (e) { handleError(res, e); }
 });
@@ -210,8 +226,12 @@ router.post('/actions/process-recurring', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post('/actions/close-year', validate(closeYearSchema), async (req, res, next) => {
-  try { res.status(201).json(await closeYear(req.body.year)); } catch (e) { handleError(res, e); }
+router.post('/actions/close-year', requireRole('admin'), validate(closeYearSchema), async (req, res, next) => {
+  try {
+    const result = await closeYear(req.body.year);
+    await audit(req, 'close_year', 'year_end', result.year);
+    res.status(201).json(result);
+  } catch (e) { handleError(res, e); }
 });
 
 router.get('/reports/inventory-valuation', async (req, res, next) => {
@@ -222,6 +242,55 @@ router.get('/reports/bank-reconciliation', async (req, res, next) => {
     if (!req.query.account) return res.status(400).json({ error: 'account code required' });
     res.json(await reports.bankReconciliation(req.query.account as string, req.query.as_of as string));
   } catch (e) { next(e); }
+});
+
+router.get('/credit-notes', async (req, res, next) => {
+  try { res.json((await query('SELECT * FROM credit_notes ORDER BY issue_date DESC, id DESC')).rows); } catch (e) { next(e); }
+});
+router.post('/credit-notes', validate(noteSchema), async (req, res, next) => {
+  try {
+    const result = await createNote(req.body);
+    await audit(req, 'create_note', 'credit_note', result.noteId, { noteNumber: result.noteNumber, noteType: result.noteType });
+    res.status(201).json(result);
+  } catch (e) { handleError(res, e); }
+});
+
+router.get('/orders', async (req, res, next) => {
+  try { res.json((await query('SELECT * FROM orders ORDER BY order_date DESC, id DESC')).rows); } catch (e) { next(e); }
+});
+router.post('/orders', validate(orderSchema), async (req, res, next) => {
+  try {
+    const result = await createOrder(req.body);
+    await audit(req, 'create_order', 'order', result.orderId, { orderNumber: result.orderNumber, orderType: result.orderType });
+    res.status(201).json(result);
+  } catch (e) { handleError(res, e); }
+});
+router.post('/actions/convert-order', validate(approveEntrySchema), async (req, res, next) => {
+  try {
+    const result = await convertOrderToInvoice(req.body.entryId);
+    await audit(req, 'convert_order', 'order', result.orderId, { invoiceNumber: result.invoiceNumber });
+    res.status(201).json(result);
+  } catch (e) { handleError(res, e); }
+});
+
+router.post('/actions/dispose-asset', validate(disposeAssetSchema), async (req, res, next) => {
+  try {
+    const result = await disposeAsset(req.body.assetId, req.body);
+    await audit(req, 'dispose_asset', 'fixed_asset', result.assetId, { gainLoss: result.gainLoss });
+    res.status(201).json(result);
+  } catch (e) { handleError(res, e); }
+});
+
+router.post('/actions/approve-entry', validate(approveEntrySchema), async (req, res, next) => {
+  try {
+    const result = await journal.approveEntry(req.body.entryId);
+    await audit(req, 'approve_entry', 'journal_entry', result.id, { reference: result.reference });
+    res.status(200).json(result);
+  } catch (e) { handleError(res, e); }
+});
+
+router.get('/audit-log', async (req, res, next) => {
+  try { res.json((await query('SELECT * FROM audit_log ORDER BY created_at DESC, id DESC LIMIT 200')).rows); } catch (e) { next(e); }
 });
 
 export default router;

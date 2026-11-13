@@ -28,6 +28,7 @@ export const postEntrySchema = z.object({
   reference: z.string().optional().default(''),
   description: z.string().optional().default(''),
   idempotencyKey: z.string().nullable().optional(),
+  status: z.enum(['draft', 'posted']).optional().default('posted'),
   lines: z.array(journalLineSchema).min(1),
 });
 
@@ -125,4 +126,46 @@ export const recurringEntrySchema = z.object({
 
 export const closeYearSchema = z.object({
   year: z.number().int().min(2000).max(2100),
+});
+
+export const noteSchema = z.object({
+  partyId: z.number().int().positive(),
+  noteType: z.enum(['credit', 'debit']),
+  issueDate: z.string().min(1),
+  reason: z.string().optional().nullable(),
+  invoiceId: z.number().int().positive().nullable().optional(),
+  subtotal: z.union([z.string(), z.number()]),
+  taxRateId: z.number().int().positive().nullable().optional(),
+  noteNumber: z.string().optional(),
+  accountCode: z.string().optional(),
+});
+
+export const orderLineSchema = z.object({
+  description: z.string().min(1),
+  accountCode: z.string().min(1),
+  quantity: z.number().optional().default(1),
+  unitPrice: z.number().optional().default(0),
+  amount: z.union([z.string(), z.number()]),
+});
+
+export const orderSchema = z.object({
+  orderType: z.enum(['purchase', 'sale']),
+  partyId: z.number().int().positive(),
+  orderDate: z.string().min(1),
+  expectedDate: z.string().nullable().optional(),
+  status: z.enum(['draft', 'confirmed', 'billed', 'cancelled']).optional().default('confirmed'),
+  taxRateId: z.number().int().positive().nullable().optional(),
+  orderNumber: z.string().optional(),
+  lines: z.array(orderLineSchema).min(1),
+});
+
+export const disposeAssetSchema = z.object({
+  assetId: z.number().int().positive(),
+  date: z.string().min(1),
+  proceeds: z.union([z.string(), z.number()]).optional().default('0'),
+  method: z.string().optional().default('sale'),
+});
+
+export const approveEntrySchema = z.object({
+  entryId: z.number().int().positive(),
 });

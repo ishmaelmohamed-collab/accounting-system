@@ -46,7 +46,7 @@ export async function getEntry(id: number, client?: any): Promise<any> {
   return rows[0];
 }
 
-async function _postJournalEntry(args: PostEntryArgs, client: any): Promise<any> {
+async function _postJournalEntry(args: PostEntryArgs, client: any, status: string = 'posted'): Promise<any> {
   const { date, reference = '', description = '', lines, idempotencyKey = null } = args;
 
   if (idempotencyKey) {
@@ -73,12 +73,12 @@ async function _postJournalEntry(args: PostEntryArgs, client: any): Promise<any>
     );
   }
 
-  await client.query("UPDATE journal_entries SET status = 'posted' WHERE id = $1", [entryId]);
+  await client.query('UPDATE journal_entries SET status = $2 WHERE id = $1', [entryId, status]);
   return getEntry(entryId, client);
 }
 
 export async function postJournalEntry(args: PostEntryArgs, client?: any): Promise<any> {
-  const { lines } = args;
+  const { lines, status = 'posted' } = args;
   if (!lines || lines.length === 0) throw new Error('A journal entry needs at least one line.');
 
   const totalDebit = lines.filter((l) => l.lineType === 'debit').reduce((s, l) => s.plus(money(l.amount)), money(0));
@@ -88,10 +88,25 @@ export async function postJournalEntry(args: PostEntryArgs, client?: any): Promi
   if (!totalDebit.minus(totalCredit).abs().lessThanOrEqualTo(0.005)) {
     throw new Error(`Journal entry is not balanced: debits ${totalDebit} != credits ${totalCredit}.`);
   }
-  if (await periodIsClosed(args.date)) throw new Error(`Period ${args.date} is closed for posting.`);
+  if (status === 'posted' && await periodIsClosed(args.date)) throw new Error(`Period ${args.date} is closed for posting.`);
 
-  if (client) return _postJournalEntry(args, client);
-  return withTransaction((c) => _postJournalEntry(args, c));
+  if (client) return _postJournalEntry(args, client, status);
+  return withTransaction((c) => _postJournalEntry(args, c, status));
+}
+
+export async function approveEntry(entryId: number): Promise<any> {
+  const entry = await getEntry(entryId);
+  if (!entry) throw new Error('Entry not found');
+  if (entry.status !== 'draft') throw new Error('Only draft entries can be approved');
+
+  const lines = entry.lines || [];
+  const totalDebit = lines.filter((l: any) => l.line_type === 'debit').reduce((s: any, l: any) => s.plus(money(l.amount)), money(0));
+  const totalCredit = lines.filter((l: any) => l.line_type === 'credit').reduce((s: any, l: any) => s.plus(money(l.amount)), money(0));
+  if (!totalDebit.minus(totalCredit).abs().lessThanOrEqualTo(0.005)) throw new Error('Entry is not balanced');
+  if (await periodIsClosed(entry.entry_date)) throw new Error(`Period ${entry.entry_date} is closed for posting.`);
+
+  await query("UPDATE journal_entries SET status = 'posted' WHERE id = $1", [entryId]);
+  return getEntry(entryId);
 }
 
 export async function reverseEntry(entryId: number): Promise<any> {
