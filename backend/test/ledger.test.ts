@@ -19,6 +19,11 @@ describe('money (decimal.js precision)', () => {
     for (let i = 0; i < 10; i++) sum = sum.plus(money('0.1'));
     expect(sum.toFixed(1)).toBe('1.0');
   });
+
+  it('distinguishes zero from positive (greaterThan)', () => {
+    expect(money('0').greaterThan(0)).toBe(false);
+    expect(money('0.01').greaterThan(0)).toBe(true);
+  });
 });
 
 describe('journal service', () => {

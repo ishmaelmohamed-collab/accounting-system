@@ -31,7 +31,7 @@ export async function trialBalance(): Promise<any[]> {
       const b = balances[a.id] || { debit: money(0), credit: money(0) };
       return { code: a.code, name: a.name, type: a.type, debit: b.debit, credit: b.credit };
     })
-    .filter((r) => r.debit.isPositive() || r.credit.isPositive());
+    .filter((r) => r.debit.greaterThan(0) || r.credit.greaterThan(0));
 }
 
 export async function profitAndLoss(startDate?: string, endDate?: string): Promise<any> {
@@ -95,41 +95,35 @@ export async function cashFlow(startDate?: string, endDate?: string): Promise<an
   const balancesStart = startBoundary ? await accountBalances(undefined, startBoundary) : {};
   const balancesEnd = await accountBalances(undefined, endDate);
 
-  const signed = async (code: string, balances: any): Promise<any> => {
-    const { rows } = await query('SELECT id, type FROM accounts WHERE code = $1', [code]);
-    if (!rows.length) return money(0);
-    const b = balances[rows[0].id] || { debit: money(0), credit: money(0) };
-    return rows[0].type === 'asset' ? b.debit.minus(b.credit) : b.credit.minus(b.debit);
-  };
+  const { rows: accounts } = await query("SELECT id, code, type FROM accounts WHERE is_active = TRUE");
 
-  let workingCapitalChange = money(0);
-  for (const code of WORKING_CAPITAL_CODES) {
-    const { rows } = await query('SELECT id, type FROM accounts WHERE code = $1', [code]);
-    if (!rows.length) continue;
-    const a = rows[0];
+  let cashStart = money(0);
+  let cashEnd = money(0);
+  let workingCapitalChange = money(0); // ΣΔ(liabilities) - ΣΔ(non-cash assets)
+  let financing = money(0);            // ΣΔ(equity)
+
+  for (const a of accounts) {
+    if (a.type === 'revenue' || a.type === 'expense') continue; // captured in net income
     const s = balancesStart[a.id] || { debit: money(0), credit: money(0) };
     const e = balancesEnd[a.id] || { debit: money(0), credit: money(0) };
-    const startBal = a.type === 'asset' ? s.debit.minus(s.credit) : s.credit.minus(s.debit);
-    const endBal = a.type === 'asset' ? e.debit.minus(e.credit) : e.credit.minus(e.debit);
-    const delta = endBal.minus(startBal);
-    workingCapitalChange = workingCapitalChange.plus(a.type === 'asset' ? delta.negated() : delta);
+    const sBal = a.type === 'asset' ? s.debit.minus(s.credit) : s.credit.minus(s.debit);
+    const eBal = a.type === 'asset' ? e.debit.minus(e.credit) : e.credit.minus(e.debit);
+    const delta = eBal.minus(sBal);
+
+    if (CASH_CODES.includes(a.code)) {
+      cashStart = cashStart.plus(sBal);
+      cashEnd = cashEnd.plus(eBal);
+    } else if (a.type === 'asset') {
+      workingCapitalChange = workingCapitalChange.minus(delta);
+    } else if (a.type === 'equity') {
+      financing = financing.plus(delta);
+    } else {
+      workingCapitalChange = workingCapitalChange.plus(delta);
+    }
   }
 
   const operating = netIncome.plus(workingCapitalChange);
-
-  let financing = money(0);
-  for (const code of EQUITY_CODES) {
-    financing = financing.plus((await signed(code, balancesEnd)).minus(await signed(code, balancesStart)));
-  }
-
   const netChange = operating.plus(financing);
-
-  let cashEnd = money(0);
-  let cashStart = money(0);
-  for (const code of CASH_CODES) {
-    cashEnd = cashEnd.plus(await signed(code, balancesEnd));
-    cashStart = cashStart.plus(await signed(code, balancesStart));
-  }
   const actual = cashEnd.minus(cashStart);
 
   return {
@@ -161,7 +155,7 @@ async function agedInvoices(invoiceType: string, asOfDate: string): Promise<any[
   const result: any[] = [];
   for (const r of rows) {
     const outstanding = money(r.total).minus(money(r.allocated));
-    if (!outstanding.isPositive()) continue;
+    if (!outstanding.greaterThan(0)) continue;
     const days = Math.floor((new Date(asOfDate).getTime() - new Date(r.due_date).getTime()) / 86400000);
     result.push({ party: r.party, invoiceNumber: r.invoice_number, outstanding, bucket: ageBucket(days) });
   }
@@ -429,7 +423,7 @@ export async function inventoryValuation(): Promise<any[]> {
     let totalCost = money(0);
     for (const m of movements) {
       const q = money(m.quantity);
-      if (q.isPositive()) {
+      if (q.greaterThan(0)) {
         totalCost = totalCost.plus(q.times(money(m.unit_cost)));
         qty = qty.plus(q);
       } else {

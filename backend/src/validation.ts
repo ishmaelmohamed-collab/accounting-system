@@ -169,3 +169,32 @@ export const disposeAssetSchema = z.object({
 export const approveEntrySchema = z.object({
   entryId: z.number().int().positive(),
 });
+
+export const importAccountsSchema = z.object({
+  csv: z.string().min(1),
+});
+
+export const importBalancesSchema = z.object({
+  csv: z.string().min(1),
+  date: z.string().min(1),
+});
+
+export const attachmentSchema = z.object({
+  entityType: z.string().min(1),
+  entityId: z.number().int().positive().nullable().optional(),
+  filename: z.string().min(1),
+  contentType: z.string().optional().default('application/octet-stream'),
+  contentBase64: z.string().min(1),
+});
+
+export const prepaymentSchema = z.object({
+  description: z.string().min(1),
+  accountCode: z.string().min(1),
+  totalAmount: z.union([z.string(), z.number()]),
+  months: z.number().int().positive(),
+  startDate: z.string().min(1),
+});
+
+export const amortizeSchema = z.object({
+  asOfDate: z.string().min(1),
+});

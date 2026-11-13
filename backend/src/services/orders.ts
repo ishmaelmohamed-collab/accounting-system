@@ -10,7 +10,7 @@ async function _createOrder(args: any, client: any): Promise<any> {
   } = args;
 
   const subtotal = lines.reduce((s: any, l: any) => s.plus(money(l.amount)), money(0));
-  if (!subtotal.isPositive()) throw new Error('Order subtotal must be positive.');
+  if (!subtotal.greaterThan(0)) throw new Error('Order subtotal must be positive.');
 
   let taxAmount = money(0);
   if (taxRateId) {

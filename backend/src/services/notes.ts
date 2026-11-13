@@ -11,7 +11,7 @@ async function _createNote(args: any, client: any): Promise<any> {
   } = args;
 
   const subtotal = money(subtotalArg);
-  if (!subtotal.isPositive()) throw new Error('Note subtotal must be positive.');
+  if (!subtotal.greaterThan(0)) throw new Error('Note subtotal must be positive.');
 
   let taxAmount = money(0);
   if (taxRateId) {
@@ -40,7 +40,7 @@ async function _createNote(args: any, client: any): Promise<any> {
         { accountCode: CODES.AR, lineType: 'debit', amount: total.toFixed(2), partyId },
         { accountCode, lineType: 'credit', amount: subtotal.toFixed(2), partyId },
       ];
-  if (taxAmount.isPositive()) {
+  if (taxAmount.greaterThan(0)) {
     lines.push(noteType === 'credit'
       ? { accountCode: CODES.VAT_PAYABLE, lineType: 'debit', amount: taxAmount.toFixed(2) }
       : { accountCode: CODES.VAT_PAYABLE, lineType: 'credit', amount: taxAmount.toFixed(2) });

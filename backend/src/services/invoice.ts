@@ -9,7 +9,7 @@ export async function _createInvoice(args: CreateInvoiceArgs, client: any): Prom
   const invoiceNumber = args.invoiceNumber || await nextNumber(client, 'invoice');
 
   const subtotal = lines.reduce((s, l) => s.plus(money(l.amount)), money(0));
-  if (!subtotal.isPositive()) throw new Error('Invoice subtotal must be positive.');
+  if (!subtotal.greaterThan(0)) throw new Error('Invoice subtotal must be positive.');
 
   let taxAmount = money(0);
   if (taxRateId) {
@@ -37,11 +37,11 @@ export async function _createInvoice(args: CreateInvoiceArgs, client: any): Prom
   if (invoiceType === 'sale') {
     entryLines.push({ accountCode: CODES.AR, lineType: 'debit', amount: total.toFixed(2), partyId });
     for (const line of lines) entryLines.push({ accountCode: line.accountCode, lineType: 'credit', amount: line.amount, partyId });
-    if (taxAmount.isPositive()) entryLines.push({ accountCode: CODES.VAT_PAYABLE, lineType: 'credit', amount: taxAmount.toFixed(2), partyId });
+    if (taxAmount.greaterThan(0)) entryLines.push({ accountCode: CODES.VAT_PAYABLE, lineType: 'credit', amount: taxAmount.toFixed(2), partyId });
   } else {
     entryLines.push({ accountCode: CODES.AP, lineType: 'credit', amount: total.toFixed(2), partyId });
     for (const line of lines) entryLines.push({ accountCode: line.accountCode, lineType: 'debit', amount: line.amount, partyId });
-    if (taxAmount.isPositive()) entryLines.push({ accountCode: CODES.VAT_PAYABLE, lineType: 'debit', amount: taxAmount.toFixed(2), partyId });
+    if (taxAmount.greaterThan(0)) entryLines.push({ accountCode: CODES.VAT_PAYABLE, lineType: 'debit', amount: taxAmount.toFixed(2), partyId });
   }
 
   const entry = await postJournalEntry({

@@ -21,7 +21,7 @@ export async function closeYear(year: number): Promise<any> {
   for (const e of pnl.expense) lines.push({ accountCode: e.code, lineType: 'credit', amount: e.amount.toFixed(2) });
 
   const netIncome = pnl.netIncome;
-  if (netIncome.isPositive()) {
+  if (netIncome.greaterThan(0)) {
     lines.push({ accountCode: RETAINED_EARNINGS, lineType: 'credit', amount: netIncome.toFixed(2) });
   } else if (netIncome.isNegative()) {
     lines.push({ accountCode: RETAINED_EARNINGS, lineType: 'debit', amount: netIncome.abs().toFixed(2) });

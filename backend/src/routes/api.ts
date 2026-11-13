@@ -10,8 +10,11 @@ import { closeYear } from '../services/yearEnd';
 import { createNote } from '../services/notes';
 import { createOrder, convertOrderToInvoice } from '../services/orders';
 import { disposeAsset } from '../services/assets';
+import { importAccounts, importOpeningBalances } from '../services/imports';
+import { createPrepayment, amortizePrepayments } from '../services/prepayments';
+import { toCsv } from '../csv';
 import * as reports from '../reports';
-import { validate, postEntrySchema, createInvoiceSchema, recordPaymentSchema, partySchema, reverseEntrySchema, departmentSchema, fixedAssetSchema, inventoryItemSchema, stockMovementSchema, bankTransactionSchema, recurringEntrySchema, closeYearSchema, noteSchema, orderSchema, disposeAssetSchema, approveEntrySchema } from '../validation';
+import { validate, postEntrySchema, createInvoiceSchema, recordPaymentSchema, partySchema, reverseEntrySchema, departmentSchema, fixedAssetSchema, inventoryItemSchema, stockMovementSchema, bankTransactionSchema, recurringEntrySchema, closeYearSchema, noteSchema, orderSchema, disposeAssetSchema, approveEntrySchema, importAccountsSchema, importBalancesSchema, attachmentSchema, prepaymentSchema, amortizeSchema } from '../validation';
 
 const router = express.Router();
 router.use(requireAuth);
@@ -291,6 +294,91 @@ router.post('/actions/approve-entry', validate(approveEntrySchema), async (req, 
 
 router.get('/audit-log', async (req, res, next) => {
   try { res.json((await query('SELECT * FROM audit_log ORDER BY created_at DESC, id DESC LIMIT 200')).rows); } catch (e) { next(e); }
+});
+
+router.post('/import/accounts', validate(importAccountsSchema), async (req, res, next) => {
+  try {
+    const result = await importAccounts(req.body.csv);
+    await audit(req, 'import_accounts', 'account');
+    res.status(201).json(result);
+  } catch (e) { handleError(res, e); }
+});
+router.post('/import/opening-balances', validate(importBalancesSchema), async (req, res, next) => {
+  try {
+    const result = await importOpeningBalances(req.body.csv, req.body.date);
+    await audit(req, 'import_opening_balances', 'journal_entry', result.journalEntryId);
+    res.status(201).json(result);
+  } catch (e) { handleError(res, e); }
+});
+
+const exportMap: Record<string, () => Promise<any[]>> = {
+  'trial-balance': () => reports.trialBalance(),
+  'aged-receivables': () => reports.agedReceivables(),
+  'aged-payables': () => reports.agedPayables(),
+  'budget-variance': () => reports.budgetVariance(),
+  'inventory-valuation': () => reports.inventoryValuation(),
+  'profit-and-loss-by-department': () => reports.profitAndLossByDepartment(),
+};
+router.get('/export/:report', async (req, res, next) => {
+  try {
+    const fn = exportMap[req.params.report];
+    if (!fn) return res.status(404).json({ error: 'Unknown report' });
+    const rows = await fn();
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${req.params.report}.csv"`);
+    res.send(toCsv(rows));
+  } catch (e) { next(e); }
+});
+
+router.post('/attachments', validate(attachmentSchema), async (req, res, next) => {
+  try {
+    const { entityType, entityId, filename, contentType, contentBase64 } = req.body;
+    const content = Buffer.from(contentBase64, 'base64');
+    const r = await query(
+      'INSERT INTO attachments (entity_type, entity_id, filename, content_type, content, uploaded_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, entity_type, entity_id, filename, content_type, created_at',
+      [entityType, entityId ?? null, filename, contentType, content, (req as any).session.userId],
+    );
+    await audit(req, 'upload_attachment', 'attachment', r.rows[0].id, { filename });
+    res.status(201).json(r.rows[0]);
+  } catch (e) { next(e); }
+});
+router.get('/attachments', async (req, res, next) => {
+  try {
+    const { entityType, entityId } = req.query;
+    let sql = 'SELECT id, entity_type, entity_id, filename, content_type, created_at FROM attachments WHERE 1=1';
+    const params: any[] = [];
+    if (entityType) { params.push(entityType); sql += ` AND entity_type = $${params.length}`; }
+    if (entityId) { params.push(entityId); sql += ` AND entity_id = $${params.length}`; }
+    sql += ' ORDER BY created_at DESC';
+    res.json((await query(sql, params)).rows);
+  } catch (e) { next(e); }
+});
+router.get('/attachments/:id/download', async (req, res, next) => {
+  try {
+    const r = (await query('SELECT * FROM attachments WHERE id = $1', [req.params.id])).rows[0];
+    if (!r) return res.status(404).json({ error: 'Attachment not found' });
+    res.setHeader('Content-Type', r.content_type);
+    res.setHeader('Content-Disposition', `attachment; filename="${r.filename}"`);
+    res.send(r.content);
+  } catch (e) { next(e); }
+});
+
+router.get('/prepayments', async (req, res, next) => {
+  try { res.json((await query('SELECT * FROM prepayments ORDER BY start_date, id')).rows); } catch (e) { next(e); }
+});
+router.post('/prepayments', validate(prepaymentSchema), async (req, res, next) => {
+  try {
+    const result = await createPrepayment(req.body);
+    await audit(req, 'create_prepayment', 'prepayment', result.prepaymentId);
+    res.status(201).json(result);
+  } catch (e) { handleError(res, e); }
+});
+router.post('/actions/amortize-prepayments', validate(amortizeSchema), async (req, res, next) => {
+  try {
+    const result = await amortizePrepayments(req.body.asOfDate);
+    await audit(req, 'amortize_prepayments', 'prepayment');
+    res.json({ posted: result });
+  } catch (e) { handleError(res, e); }
 });
 
 export default router;

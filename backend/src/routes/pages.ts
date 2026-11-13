@@ -4,6 +4,7 @@ import { verifyPassword } from '../auth';
 import * as reports from '../reports';
 import { money } from '../money';
 import { closeYear } from '../services/yearEnd';
+import { importOpeningBalances } from '../services/imports';
 
 const router = express.Router();
 
@@ -97,6 +98,9 @@ router.get('/', async (req, res, next) => {
         <a href="/orders">Orders</a>
         <a href="/credit-notes">Notes</a>
         <a href="/audit-log">Audit</a>
+        <a href="/prepayments">Prepay</a>
+        <a href="/attachments">Files</a>
+        <a href="/import">Import</a>
         <a href="/logout">Logout (${(req as any).session.username})</a>
       </div>
       <div>
@@ -370,6 +374,39 @@ router.get('/audit-log', async (req, res, next) => {
     const html = rows.map((r: any) => `<tr><td>${r.created_at}</td><td>${r.username || ''}</td><td>${r.action}</td><td>${r.entity_type}${r.entity_id ? ' #' + r.entity_id : ''}</td></tr>`).join('');
     res.send(reportPage('Audit Log', `<table><tr><th>When</th><th>User</th><th>Action</th><th>Entity</th></tr>${html || '<tr><td colspan="4">No activity yet</td></tr>'}</table>`));
   } catch (e) { next(e); }
+});
+
+router.get('/prepayments', async (req, res, next) => {
+  try {
+    const rows = (await query('SELECT * FROM prepayments ORDER BY start_date, id')).rows;
+    const html = rows.map((r: any) => `<tr><td>${r.id}</td><td>${r.description}</td><td>${r.start_date}</td><td class="num">${r.total_amount}</td><td>${r.amortized_months}/${r.months}</td></tr>`).join('');
+    res.send(reportPage('Prepayments', `<p>Create via <code>POST /api/prepayments</code>, amortize via <code>POST /api/actions/amortize-prepayments</code>.</p><table><tr><th>ID</th><th>Description</th><th>Start</th><th class="num">Total</th><th>Amortized</th></tr>${html || '<tr><td colspan="5">No prepayments</td></tr>'}</table>`));
+  } catch (e) { next(e); }
+});
+
+router.get('/attachments', async (req, res, next) => {
+  try {
+    const rows = (await query('SELECT id, entity_type, entity_id, filename, content_type, created_at FROM attachments ORDER BY created_at DESC')).rows;
+    const html = rows.map((r: any) => `<tr><td>${r.id}</td><td>${r.entity_type}${r.entity_id ? ' #' + r.entity_id : ''}</td><td>${r.filename}</td><td>${r.content_type}</td><td>${r.created_at}</td></tr>`).join('');
+    res.send(reportPage('Attachments', `<p>Upload via <code>POST /api/attachments</code> (base64 content).</p><table><tr><th>ID</th><th>Entity</th><th>File</th><th>Type</th><th>When</th></tr>${html || '<tr><td colspan="5">No attachments</td></tr>'}</table>`));
+  } catch (e) { next(e); }
+});
+
+router.get('/import', (req, res) => {
+  res.send(reportPage('Import', `
+    <h2 style="color:#38bdf8;font-size:16px">Opening balances (CSV: accountCode,debit,credit)</h2>
+    <form method="post" action="/import"><input name="date" value="2026-01-01"> <label>date</label><br><textarea name="csv" rows="6" cols="40">accountCode,debit,credit
+1000,50000,0
+3000,0,50000</textarea><br><button>Import</button></form>`));
+});
+
+router.post('/import', async (req, res, next) => {
+  try {
+    await importOpeningBalances(req.body.csv, req.body.date);
+    return res.redirect('/import');
+  } catch (e: any) {
+    return res.send(reportPage('Import', `<p class="bad">${e.message}</p><a href="/import">← Back</a>`));
+  }
 });
 
 export default router;

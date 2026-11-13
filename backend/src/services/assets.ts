@@ -31,7 +31,7 @@ export async function disposeAsset(assetId: number, args: any): Promise<any> {
       { accountCode: assetCode, lineType: 'credit', amount: cost.toFixed(2) },
     ];
     const netGainLoss = proceedsAmt.plus(accumulated).minus(cost);
-    if (netGainLoss.isPositive()) {
+    if (netGainLoss.greaterThan(0)) {
       lines.push({ accountCode: GAIN_LOSS, lineType: 'credit', amount: netGainLoss.toFixed(2) });
     } else if (netGainLoss.isNegative()) {
       lines.push({ accountCode: GAIN_LOSS, lineType: 'debit', amount: netGainLoss.abs().toFixed(2) });
