@@ -1,6 +1,6 @@
 import express from 'express';
 import { query } from '../db';
-import { verifyPassword } from '../auth';
+import { verifyPassword, hashPassword } from '../auth';
 import * as reports from '../reports';
 import { money } from '../money';
 import { closeYear } from '../services/yearEnd';
@@ -101,6 +101,7 @@ router.get('/', async (req, res, next) => {
         <a href="/prepayments">Prepay</a>
         <a href="/attachments">Files</a>
         <a href="/import">Import</a>
+        <a href="/users">Users</a>
         <a href="/logout">Logout (${(req as any).session.username})</a>
       </div>
       <div>
@@ -406,6 +407,30 @@ router.post('/import', async (req, res, next) => {
     return res.redirect('/import');
   } catch (e: any) {
     return res.send(reportPage('Import', `<p class="bad">${e.message}</p><a href="/import">← Back</a>`));
+  }
+});
+
+router.get('/users', async (req, res, next) => {
+  if ((req as any).session.role !== 'admin') {
+    return res.send(reportPage('Users', '<p class="bad">Only admins can manage users.</p><a href="/">← Dashboard</a>'));
+  }
+  try {
+    const rows = (await query('SELECT id, username, role, created_at FROM users ORDER BY id')).rows;
+    const html = rows.map((r: any) => `<tr><td>${r.id}</td><td>${r.username}</td><td>${r.role}</td><td>${r.created_at}</td></tr>`).join('');
+    res.send(reportPage('User Management', `<form method="post" action="/users"><input name="username" placeholder="username" required><input name="password" type="password" placeholder="password" required><select name="role"><option>viewer</option><option>accountant</option><option>admin</option></select><button>Add User</button></form>
+      <table><tr><th>ID</th><th>Username</th><th>Role</th><th>Created</th></tr>${html || '<tr><td colspan="4">No users</td></tr>'}</table>`));
+  } catch (e) { next(e); }
+});
+
+router.post('/users', async (req, res, next) => {
+  if ((req as any).session.role !== 'admin') return res.status(403).send('Forbidden');
+  try {
+    const { username, password, role } = req.body;
+    const hash = await hashPassword(password);
+    await query('INSERT INTO users (username, password_hash, role) VALUES ($1,$2,$3)', [username, hash, role]);
+    return res.redirect('/users');
+  } catch (e: any) {
+    return res.send(reportPage('Users', `<p class="bad">${e.message}</p><a href="/users">← Back</a>`));
   }
 });
 

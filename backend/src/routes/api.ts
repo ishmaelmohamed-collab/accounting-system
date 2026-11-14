@@ -1,6 +1,6 @@
 import express from 'express';
 import { query } from '../db';
-import { requireAuth, requireRole } from '../auth';
+import { requireAuth, requireRole, hashPassword } from '../auth';
 import { logAudit } from '../audit';
 import * as journal from '../services/journal';
 import { createInvoice } from '../services/invoice';
@@ -13,8 +13,9 @@ import { disposeAsset } from '../services/assets';
 import { importAccounts, importOpeningBalances } from '../services/imports';
 import { createPrepayment, amortizePrepayments } from '../services/prepayments';
 import { toCsv } from '../csv';
+import { generateStatementPdf } from '../pdf';
 import * as reports from '../reports';
-import { validate, postEntrySchema, createInvoiceSchema, recordPaymentSchema, partySchema, reverseEntrySchema, departmentSchema, fixedAssetSchema, inventoryItemSchema, stockMovementSchema, bankTransactionSchema, recurringEntrySchema, closeYearSchema, noteSchema, orderSchema, disposeAssetSchema, approveEntrySchema, importAccountsSchema, importBalancesSchema, attachmentSchema, prepaymentSchema, amortizeSchema } from '../validation';
+import { validate, postEntrySchema, createInvoiceSchema, recordPaymentSchema, partySchema, reverseEntrySchema, departmentSchema, fixedAssetSchema, inventoryItemSchema, stockMovementSchema, bankTransactionSchema, recurringEntrySchema, closeYearSchema, noteSchema, orderSchema, disposeAssetSchema, approveEntrySchema, importAccountsSchema, importBalancesSchema, attachmentSchema, prepaymentSchema, amortizeSchema, userSchema } from '../validation';
 
 const router = express.Router();
 router.use(requireAuth);
@@ -378,6 +379,70 @@ router.post('/actions/amortize-prepayments', validate(amortizeSchema), async (re
     const result = await amortizePrepayments(req.body.asOfDate);
     await audit(req, 'amortize_prepayments', 'prepayment');
     res.json({ posted: result });
+  } catch (e) { handleError(res, e); }
+});
+
+const pdfExportMap: Record<string, () => Promise<{ title: string; headers: string[]; rows: string[][] }>> = {
+  'trial-balance': async () => {
+    const tb = await reports.trialBalance();
+    return {
+      title: 'Trial Balance',
+      headers: ['Code', 'Account', 'Debit', 'Credit'],
+      rows: tb.map((r) => [r.code, r.name, r.debit.toFixed(2), r.credit.toFixed(2)]),
+    };
+  },
+  'profit-and-loss': async () => {
+    const p = await reports.profitAndLoss();
+    return {
+      title: 'Profit & Loss',
+      headers: ['Account', 'Type', 'Amount'],
+      rows: [
+        ...p.revenue.map((r) => [r.name, 'Revenue', r.amount.toFixed(2)]),
+        ...p.expense.map((r) => [r.name, 'Expense', r.amount.toFixed(2)]),
+        ['', 'Total Revenue', p.totalRevenue.toFixed(2)],
+        ['', 'Total Expense', p.totalExpense.toFixed(2)],
+        ['', 'Net Income', p.netIncome.toFixed(2)],
+      ],
+    };
+  },
+  'balance-sheet': async () => {
+    const b = await reports.balanceSheet();
+    return {
+      title: 'Balance Sheet',
+      headers: ['Account', 'Section', 'Amount'],
+      rows: [
+        ...b.assets.map((r) => [r.name, 'Asset', r.amount.toFixed(2)]),
+        ...b.liabilities.map((r) => [r.name, 'Liability', r.amount.toFixed(2)]),
+        ...b.equity.map((r) => [r.name, 'Equity', r.amount.toFixed(2)]),
+        ['', 'Total Assets', b.totalAssets.toFixed(2)],
+        ['', 'Total Liabilities', b.totalLiabilities.toFixed(2)],
+        ['', 'Total Equity', b.totalEquity.toFixed(2)],
+      ],
+    };
+  },
+};
+router.get('/export/:report/pdf', async (req, res, next) => {
+  try {
+    const fn = pdfExportMap[req.params.report];
+    if (!fn) return res.status(404).json({ error: 'Unknown report' });
+    const { title, headers, rows } = await fn();
+    const pdf = await generateStatementPdf(title, headers, rows);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${req.params.report}.pdf"`);
+    res.send(pdf);
+  } catch (e) { next(e); }
+});
+
+router.get('/users', requireRole('admin'), async (req, res, next) => {
+  try { res.json((await query('SELECT id, username, role, created_at FROM users ORDER BY id')).rows); } catch (e) { next(e); }
+});
+router.post('/users', requireRole('admin'), validate(userSchema), async (req, res, next) => {
+  try {
+    const { username, password, role } = req.body;
+    const hash = await hashPassword(password);
+    const r = await query('INSERT INTO users (username, password_hash, role) VALUES ($1,$2,$3) RETURNING id, username, role', [username, hash, role]);
+    await audit(req, 'create_user', 'user', r.rows[0].id, { username, role });
+    res.status(201).json(r.rows[0]);
   } catch (e) { handleError(res, e); }
 });
 

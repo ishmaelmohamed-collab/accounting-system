@@ -198,3 +198,9 @@ export const prepaymentSchema = z.object({
 export const amortizeSchema = z.object({
   asOfDate: z.string().min(1),
 });
+
+export const userSchema = z.object({
+  username: z.string().min(1),
+  password: z.string().min(6),
+  role: z.enum(['admin', 'accountant', 'viewer']).default('viewer'),
+});
