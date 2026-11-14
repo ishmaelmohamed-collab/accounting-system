@@ -504,3 +504,42 @@ export async function bankReconciliation(accountCode: string, asOfDate?: string)
     unmatchedStatement,
   };
 }
+
+export async function dashboardKpis(): Promise<any> {
+  const pnl = await profitAndLoss();
+  const balances = await accountBalances();
+  const { rows: accts } = await query(
+    "SELECT id, code, type FROM accounts WHERE code IN ('1000','1005','1010','1100','2000')",
+  );
+
+  const balOf = (code: string): any => {
+    const a = accts.find((x) => x.code === code);
+    if (!a) return money(0);
+    const b = balances[a.id] || { debit: money(0), credit: money(0) };
+    return a.type === 'asset' ? b.debit.minus(b.credit) : b.credit.minus(b.debit);
+  };
+
+  const monthlyTrend: any[] = [];
+  const now = new Date();
+  for (let i = 11; i >= 0; i--) {
+    const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+    const m = await profitAndLoss(start.toISOString().slice(0, 10), end.toISOString().slice(0, 10));
+    monthlyTrend.push({
+      month: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`,
+      revenue: m.totalRevenue.toFixed(2),
+      expense: m.totalExpense.toFixed(2),
+    });
+  }
+
+  return {
+    cash: balOf('1000').plus(balOf('1005')).plus(balOf('1010')).toFixed(2),
+    accountsReceivable: balOf('1100').toFixed(2),
+    accountsPayable: balOf('2000').toFixed(2),
+    revenue: pnl.totalRevenue.toFixed(2),
+    expense: pnl.totalExpense.toFixed(2),
+    netIncome: pnl.netIncome.toFixed(2),
+    netMargin: pnl.totalRevenue.isZero() ? null : pnl.netIncome.div(pnl.totalRevenue).toFixed(4),
+    monthlyTrend,
+  };
+}

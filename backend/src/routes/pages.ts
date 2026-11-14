@@ -68,6 +68,7 @@ router.get('/', async (req, res, next) => {
              (SELECT count(*) FROM invoices) invoices,
              (SELECT count(*) FROM payments) payments`);
     const c = counts.rows[0];
+    const kpis = await reports.dashboardKpis();
 
     const rows = tb.map((r) =>
       `<tr><td>${r.code}</td><td>${r.name}</td><td>${r.debit.toFixed(2)}</td><td>${r.credit.toFixed(2)}</td></tr>`).join('');
@@ -105,6 +106,7 @@ router.get('/', async (req, res, next) => {
         <a href="/crm">CRM</a>
         <a href="/boms">BOMs</a>
         <a href="/production-orders">Production</a>
+        <a href="/expenses">Expenses</a>
         <a href="/logout">Logout (${(req as any).session.username})</a>
       </div>
       <div>
@@ -114,6 +116,18 @@ router.get('/', async (req, res, next) => {
         <div class="card"><div class="n">${c.invoices}</div><div class="l">Invoices</div></div>
         <div class="card"><div class="n">${c.payments}</div><div class="l">Payments</div></div>
       </div>
+      <div>
+        <div class="card"><div class="n">${kpis.cash}</div><div class="l">Cash</div></div>
+        <div class="card"><div class="n">${kpis.accountsReceivable}</div><div class="l">Receivables</div></div>
+        <div class="card"><div class="n">${kpis.accountsPayable}</div><div class="l">Payables</div></div>
+        <div class="card"><div class="n">${kpis.revenue}</div><div class="l">Revenue</div></div>
+        <div class="card"><div class="n">${kpis.expense}</div><div class="l">Expenses</div></div>
+        <div class="card"><div class="n">${kpis.netIncome}</div><div class="l">Net Income</div></div>
+      </div>
+      <h2 style="color:#38bdf8;font-size:16px">Monthly Revenue vs Expense</h2>
+      <table><tr><th>Month</th><th class="num">Revenue</th><th class="num">Expense</th><th class="num">Net</th></tr>
+      ${kpis.monthlyTrend.map((m: any) => `<tr><td>${m.month}</td><td class="num">${m.revenue}</td><td class="num">${m.expense}</td><td class="num">${(Number(m.revenue) - Number(m.expense)).toFixed(2)}</td></tr>`).join('')}
+      </table>
       <h2 style="color:#38bdf8;font-size:16px">Trial Balance</h2>
       <table><tr><th>Code</th><th>Account</th><th class="num">Debit</th><th class="num">Credit</th></tr>
       ${rows}
@@ -461,6 +475,14 @@ router.get('/production-orders', async (req, res, next) => {
     const rows = (await query('SELECT * FROM production_orders ORDER BY production_date DESC, id DESC')).rows;
     const html = rows.map((r: any) => `<tr><td>${r.id}</td><td>${r.bom_id}</td><td>${r.quantity}</td><td>${r.status}</td><td>${r.production_date}</td></tr>`).join('');
     res.send(reportPage('Production Orders', `<p>Create via <code>POST /api/production-orders</code>, produce via <code>POST /api/actions/produce-order</code>.</p><table><tr><th>ID</th><th>BOM</th><th>Qty</th><th>Status</th><th>Date</th></tr>${html || '<tr><td colspan="5">No orders</td></tr>'}</table>`));
+  } catch (e) { next(e); }
+});
+
+router.get('/expenses', async (req, res, next) => {
+  try {
+    const rows = (await query('SELECT * FROM expense_claims ORDER BY created_at DESC, id DESC')).rows;
+    const html = rows.map((r: any) => `<tr><td>${r.claim_number}</td><td>${r.description}</td><td>${r.account_code}</td><td class="num">${r.amount}</td><td>${r.status}</td><td>${r.expense_date}</td></tr>`).join('');
+    res.send(reportPage('Expense Claims', `<p>Create via <code>POST /api/expense-claims</code>; approve/reimburse/reject via <code>POST /api/actions/*-claim</code>.</p><table><tr><th>Claim</th><th>Description</th><th>Account</th><th class="num">Amount</th><th>Status</th><th>Date</th></tr>${html || '<tr><td colspan="6">No claims</td></tr>'}</table>`));
   } catch (e) { next(e); }
 });
 

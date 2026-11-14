@@ -13,10 +13,11 @@ import { disposeAsset } from '../services/assets';
 import { importAccounts, importOpeningBalances } from '../services/imports';
 import { createPrepayment, amortizePrepayments } from '../services/prepayments';
 import { createBom, createProductionOrder, produceOrder } from '../services/manufacturing';
+import { createExpenseClaim, approveExpenseClaim, reimburseExpenseClaim, rejectExpenseClaim } from '../services/expenses';
 import { toCsv } from '../csv';
 import { generateStatementPdf } from '../pdf';
 import * as reports from '../reports';
-import { validate, postEntrySchema, createInvoiceSchema, recordPaymentSchema, partySchema, reverseEntrySchema, departmentSchema, fixedAssetSchema, inventoryItemSchema, stockMovementSchema, bankTransactionSchema, recurringEntrySchema, closeYearSchema, noteSchema, orderSchema, disposeAssetSchema, approveEntrySchema, importAccountsSchema, importBalancesSchema, attachmentSchema, prepaymentSchema, amortizeSchema, userSchema, partyGroupSchema, paymentTermSchema, bomSchema, productionOrderSchema, completeProductionSchema } from '../validation';
+import { validate, postEntrySchema, createInvoiceSchema, recordPaymentSchema, partySchema, reverseEntrySchema, departmentSchema, fixedAssetSchema, inventoryItemSchema, stockMovementSchema, bankTransactionSchema, recurringEntrySchema, closeYearSchema, noteSchema, orderSchema, disposeAssetSchema, approveEntrySchema, importAccountsSchema, importBalancesSchema, attachmentSchema, prepaymentSchema, amortizeSchema, userSchema, partyGroupSchema, paymentTermSchema, bomSchema, productionOrderSchema, completeProductionSchema, expenseClaimSchema, claimActionSchema } from '../validation';
 
 const router = express.Router();
 router.use(requireAuth);
@@ -494,6 +495,29 @@ router.post('/actions/produce-order', validate(completeProductionSchema), async 
     await audit(req, 'produce_order', 'production_order', result.productionOrderId, { finishedUnitCost: result.finishedUnitCost });
     res.status(201).json(result);
   } catch (e) { handleError(res, e); }
+});
+
+router.get('/reports/dashboard-kpis', async (req, res, next) => {
+  try { res.json(await reports.dashboardKpis()); } catch (e) { next(e); }
+});
+router.get('/expense-claims', async (req, res, next) => {
+  try { res.json((await query('SELECT * FROM expense_claims ORDER BY created_at DESC, id DESC')).rows); } catch (e) { next(e); }
+});
+router.post('/expense-claims', validate(expenseClaimSchema), async (req, res, next) => {
+  try {
+    const result = await createExpenseClaim(req.body);
+    await audit(req, 'create_expense_claim', 'expense_claim', result.expenseClaimId, { claimNumber: result.claimNumber });
+    res.status(201).json(result);
+  } catch (e) { handleError(res, e); }
+});
+router.post('/actions/approve-claim', validate(claimActionSchema), async (req, res, next) => {
+  try { res.json(await approveExpenseClaim(req.body.claimId)); } catch (e) { handleError(res, e); }
+});
+router.post('/actions/reimburse-claim', validate(claimActionSchema), async (req, res, next) => {
+  try { res.json(await reimburseExpenseClaim(req.body.claimId)); } catch (e) { handleError(res, e); }
+});
+router.post('/actions/reject-claim', validate(claimActionSchema), async (req, res, next) => {
+  try { res.json(await rejectExpenseClaim(req.body.claimId)); } catch (e) { handleError(res, e); }
 });
 
 export default router;

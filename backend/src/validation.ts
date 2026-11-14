@@ -239,3 +239,15 @@ export const productionOrderSchema = z.object({
 export const completeProductionSchema = z.object({
   orderId: z.number().int().positive(),
 });
+
+export const expenseClaimSchema = z.object({
+  description: z.string().min(1),
+  accountCode: z.string().min(1),
+  amount: z.union([z.string(), z.number()]),
+  expenseDate: z.string().min(1),
+  notes: z.string().optional().nullable(),
+});
+
+export const claimActionSchema = z.object({
+  claimId: z.number().int().positive(),
+});
