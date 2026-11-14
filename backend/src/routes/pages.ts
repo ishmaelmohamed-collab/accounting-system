@@ -102,6 +102,9 @@ router.get('/', async (req, res, next) => {
         <a href="/attachments">Files</a>
         <a href="/import">Import</a>
         <a href="/users">Users</a>
+        <a href="/crm">CRM</a>
+        <a href="/boms">BOMs</a>
+        <a href="/production-orders">Production</a>
         <a href="/logout">Logout (${(req as any).session.username})</a>
       </div>
       <div>
@@ -432,6 +435,33 @@ router.post('/users', async (req, res, next) => {
   } catch (e: any) {
     return res.send(reportPage('Users', `<p class="bad">${e.message}</p><a href="/users">← Back</a>`));
   }
+});
+
+router.get('/crm', async (req, res, next) => {
+  try {
+    const groups = (await query('SELECT * FROM party_groups ORDER BY name')).rows;
+    const terms = (await query('SELECT * FROM payment_terms ORDER BY days, name')).rows;
+    const g = groups.map((r: any) => `<tr><td>${r.id}</td><td>${r.name}</td><td>${r.description || ''}</td></tr>`).join('');
+    const t = terms.map((r: any) => `<tr><td>${r.id}</td><td>${r.name}</td><td>${r.days}</td><td>${r.description || ''}</td></tr>`).join('');
+    res.send(reportPage('CRM (Groups & Payment Terms)', `<h2 style="color:#38bdf8;font-size:16px">Party Groups</h2><table><tr><th>ID</th><th>Name</th><th>Description</th></tr>${g || '<tr><td colspan="3">None</td></tr>'}</table>
+      <h2 style="color:#38bdf8;font-size:16px">Payment Terms</h2><table><tr><th>ID</th><th>Name</th><th>Days</th><th>Description</th></tr>${t || '<tr><td colspan="4">None</td></tr>'}</table>`));
+  } catch (e) { next(e); }
+});
+
+router.get('/boms', async (req, res, next) => {
+  try {
+    const rows = (await query('SELECT * FROM boms ORDER BY id')).rows;
+    const html = rows.map((r: any) => `<tr><td>${r.id}</td><td>${r.name}</td><td>${r.finished_item_id}</td><td>${r.created_at}</td></tr>`).join('');
+    res.send(reportPage('Bills of Materials', `<p>Create via <code>POST /api/boms</code>.</p><table><tr><th>ID</th><th>Name</th><th>Finished Item</th><th>Created</th></tr>${html || '<tr><td colspan="4">No BOMs</td></tr>'}</table>`));
+  } catch (e) { next(e); }
+});
+
+router.get('/production-orders', async (req, res, next) => {
+  try {
+    const rows = (await query('SELECT * FROM production_orders ORDER BY production_date DESC, id DESC')).rows;
+    const html = rows.map((r: any) => `<tr><td>${r.id}</td><td>${r.bom_id}</td><td>${r.quantity}</td><td>${r.status}</td><td>${r.production_date}</td></tr>`).join('');
+    res.send(reportPage('Production Orders', `<p>Create via <code>POST /api/production-orders</code>, produce via <code>POST /api/actions/produce-order</code>.</p><table><tr><th>ID</th><th>BOM</th><th>Qty</th><th>Status</th><th>Date</th></tr>${html || '<tr><td colspan="5">No orders</td></tr>'}</table>`));
+  } catch (e) { next(e); }
 });
 
 export default router;

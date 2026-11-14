@@ -4,9 +4,29 @@ import { CreateInvoiceArgs } from '../types';
 import { postJournalEntry, getAccountByCode, CODES } from './journal';
 import { nextNumber } from '../numbering';
 
+function addDays(date: string, days: number): string {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 export async function _createInvoice(args: CreateInvoiceArgs, client: any): Promise<any> {
-  const { partyId, invoiceType, issueDate, dueDate, lines, taxRateId = null } = args;
+  const { partyId, invoiceType, issueDate, lines, taxRateId = null } = args;
   const invoiceNumber = args.invoiceNumber || await nextNumber(client, 'invoice');
+
+  let dueDate = args.dueDate;
+  let paymentTermId = args.paymentTermId || null;
+  if (!dueDate) {
+    if (!paymentTermId) {
+      const party = (await client.query('SELECT payment_term_id FROM parties WHERE id = $1', [partyId])).rows[0];
+      paymentTermId = party?.payment_term_id || null;
+    }
+    if (paymentTermId) {
+      const term = (await client.query('SELECT days FROM payment_terms WHERE id = $1', [paymentTermId])).rows[0];
+      if (term) dueDate = addDays(issueDate, Number(term.days));
+    }
+    if (!dueDate) dueDate = issueDate;
+  }
 
   const subtotal = lines.reduce((s, l) => s.plus(money(l.amount)), money(0));
   if (!subtotal.greaterThan(0)) throw new Error('Invoice subtotal must be positive.');
@@ -19,8 +39,8 @@ export async function _createInvoice(args: CreateInvoiceArgs, client: any): Prom
   const total = subtotal.plus(taxAmount);
 
   const inv = await client.query(
-    'INSERT INTO invoices (invoice_number, party_id, invoice_type, issue_date, due_date, subtotal, tax_amount, total) VALUES ($1, $2, $3, $4::date, $5::date, $6, $7, $8) RETURNING id',
-    [invoiceNumber, partyId, invoiceType, issueDate, dueDate, subtotal.toFixed(2), taxAmount.toFixed(2), total.toFixed(2)],
+    'INSERT INTO invoices (invoice_number, party_id, invoice_type, issue_date, due_date, payment_term_id, subtotal, tax_amount, total) VALUES ($1, $2, $3, $4::date, $5::date, $6, $7, $8, $9) RETURNING id',
+    [invoiceNumber, partyId, invoiceType, issueDate, dueDate, paymentTermId, subtotal.toFixed(2), taxAmount.toFixed(2), total.toFixed(2)],
   );
   const invoiceId = inv.rows[0].id;
 

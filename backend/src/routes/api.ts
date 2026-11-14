@@ -12,10 +12,11 @@ import { createOrder, convertOrderToInvoice } from '../services/orders';
 import { disposeAsset } from '../services/assets';
 import { importAccounts, importOpeningBalances } from '../services/imports';
 import { createPrepayment, amortizePrepayments } from '../services/prepayments';
+import { createBom, createProductionOrder, produceOrder } from '../services/manufacturing';
 import { toCsv } from '../csv';
 import { generateStatementPdf } from '../pdf';
 import * as reports from '../reports';
-import { validate, postEntrySchema, createInvoiceSchema, recordPaymentSchema, partySchema, reverseEntrySchema, departmentSchema, fixedAssetSchema, inventoryItemSchema, stockMovementSchema, bankTransactionSchema, recurringEntrySchema, closeYearSchema, noteSchema, orderSchema, disposeAssetSchema, approveEntrySchema, importAccountsSchema, importBalancesSchema, attachmentSchema, prepaymentSchema, amortizeSchema, userSchema } from '../validation';
+import { validate, postEntrySchema, createInvoiceSchema, recordPaymentSchema, partySchema, reverseEntrySchema, departmentSchema, fixedAssetSchema, inventoryItemSchema, stockMovementSchema, bankTransactionSchema, recurringEntrySchema, closeYearSchema, noteSchema, orderSchema, disposeAssetSchema, approveEntrySchema, importAccountsSchema, importBalancesSchema, attachmentSchema, prepaymentSchema, amortizeSchema, userSchema, partyGroupSchema, paymentTermSchema, bomSchema, productionOrderSchema, completeProductionSchema } from '../validation';
 
 const router = express.Router();
 router.use(requireAuth);
@@ -45,8 +46,8 @@ router.get('/parties', async (req, res, next) => {
 
 router.post('/parties', validate(partySchema), async (req, res, next) => {
   try {
-    const { name, type = 'customer', email, phone, address } = req.body || {};
-    const r = await query('INSERT INTO parties (name, type, email, phone, address) VALUES ($1,$2,$3,$4,$5) RETURNING *', [name, type, email, phone, address]);
+    const { name, type = 'customer', email, phone, address, groupId = null, paymentTermId = null } = req.body || {};
+    const r = await query('INSERT INTO parties (name, type, email, phone, address, group_id, payment_term_id) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *', [name, type, email, phone, address, groupId, paymentTermId]);
     res.status(201).json(r.rows[0]);
   } catch (e) { next(e); }
 });
@@ -443,6 +444,55 @@ router.post('/users', requireRole('admin'), validate(userSchema), async (req, re
     const r = await query('INSERT INTO users (username, password_hash, role) VALUES ($1,$2,$3) RETURNING id, username, role', [username, hash, role]);
     await audit(req, 'create_user', 'user', r.rows[0].id, { username, role });
     res.status(201).json(r.rows[0]);
+  } catch (e) { handleError(res, e); }
+});
+
+router.get('/party-groups', async (req, res, next) => {
+  try { res.json((await query('SELECT * FROM party_groups ORDER BY name')).rows); } catch (e) { next(e); }
+});
+router.post('/party-groups', validate(partyGroupSchema), async (req, res, next) => {
+  try {
+    const { name, description = null } = req.body;
+    const r = await query('INSERT INTO party_groups (name, description) VALUES ($1,$2) RETURNING *', [name, description]);
+    res.status(201).json(r.rows[0]);
+  } catch (e) { next(e); }
+});
+router.get('/payment-terms', async (req, res, next) => {
+  try { res.json((await query('SELECT * FROM payment_terms ORDER BY days, name')).rows); } catch (e) { next(e); }
+});
+router.post('/payment-terms', validate(paymentTermSchema), async (req, res, next) => {
+  try {
+    const { name, days, description = null } = req.body;
+    const r = await query('INSERT INTO payment_terms (name, days, description) VALUES ($1,$2,$3) RETURNING *', [name, days, description]);
+    res.status(201).json(r.rows[0]);
+  } catch (e) { next(e); }
+});
+
+router.get('/boms', async (req, res, next) => {
+  try { res.json((await query('SELECT * FROM boms ORDER BY id')).rows); } catch (e) { next(e); }
+});
+router.post('/boms', validate(bomSchema), async (req, res, next) => {
+  try {
+    const result = await createBom(req.body);
+    await audit(req, 'create_bom', 'bom', result.bomId);
+    res.status(201).json(result);
+  } catch (e) { handleError(res, e); }
+});
+router.get('/production-orders', async (req, res, next) => {
+  try { res.json((await query('SELECT * FROM production_orders ORDER BY production_date DESC, id DESC')).rows); } catch (e) { next(e); }
+});
+router.post('/production-orders', validate(productionOrderSchema), async (req, res, next) => {
+  try {
+    const result = await createProductionOrder(req.body);
+    await audit(req, 'create_production_order', 'production_order', result.productionOrderId);
+    res.status(201).json(result);
+  } catch (e) { handleError(res, e); }
+});
+router.post('/actions/produce-order', validate(completeProductionSchema), async (req, res, next) => {
+  try {
+    const result = await produceOrder(req.body.orderId);
+    await audit(req, 'produce_order', 'production_order', result.productionOrderId, { finishedUnitCost: result.finishedUnitCost });
+    res.status(201).json(result);
   } catch (e) { handleError(res, e); }
 });
 

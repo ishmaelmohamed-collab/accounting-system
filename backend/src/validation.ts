@@ -41,11 +41,12 @@ export const invoiceLineSchema = z.object({
 });
 
 export const createInvoiceSchema = z.object({
-  invoiceNumber: z.string().min(1),
+  invoiceNumber: z.string().optional().nullable(),
   partyId: z.number().int().positive(),
   invoiceType: z.enum(['sale', 'purchase']),
   issueDate: z.string().min(1),
-  dueDate: z.string().min(1),
+  dueDate: z.string().optional().nullable(),
+  paymentTermId: z.number().int().positive().nullable().optional(),
   taxRateId: z.number().nullable().optional(),
   lines: z.array(invoiceLineSchema).min(1),
 });
@@ -71,6 +72,8 @@ export const partySchema = z.object({
   email: z.string().optional(),
   phone: z.string().optional(),
   address: z.string().optional(),
+  groupId: z.number().int().positive().nullable().optional(),
+  paymentTermId: z.number().int().positive().nullable().optional(),
 });
 
 export const reverseEntrySchema = z.object({
@@ -203,4 +206,36 @@ export const userSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(6),
   role: z.enum(['admin', 'accountant', 'viewer']).default('viewer'),
+});
+
+export const partyGroupSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().optional().nullable(),
+});
+
+export const paymentTermSchema = z.object({
+  name: z.string().min(1),
+  days: z.number().int().min(0),
+  description: z.string().optional().nullable(),
+});
+
+export const bomLineSchema = z.object({
+  componentItemId: z.number().int().positive(),
+  quantity: z.union([z.string(), z.number()]),
+});
+
+export const bomSchema = z.object({
+  finishedItemId: z.number().int().positive(),
+  name: z.string().min(1),
+  lines: z.array(bomLineSchema).min(1),
+});
+
+export const productionOrderSchema = z.object({
+  bomId: z.number().int().positive(),
+  quantity: z.union([z.string(), z.number()]),
+  productionDate: z.string().min(1),
+});
+
+export const completeProductionSchema = z.object({
+  orderId: z.number().int().positive(),
 });

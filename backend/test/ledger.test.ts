@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { money } from '../src/money';
 import * as journal from '../src/services/journal';
 import * as reports from '../src/reports';
-import { postEntrySchema, createInvoiceSchema, noteSchema, orderSchema } from '../src/validation';
+import { postEntrySchema, createInvoiceSchema, noteSchema, orderSchema, bomSchema } from '../src/validation';
 
 describe('money (decimal.js precision)', () => {
   it('adds decimals exactly (0.1 + 0.2 = 0.3)', () => {
@@ -105,6 +105,11 @@ describe('validation (Zod)', () => {
 
   it('rejects an order with no lines', () => {
     const r = orderSchema.safeParse({ orderType: 'sale', partyId: 2, orderDate: '2026-11-13', lines: [] });
+    expect(r.success).toBe(false);
+  });
+
+  it('rejects a BOM with no lines', () => {
+    const r = bomSchema.safeParse({ finishedItemId: 1, name: 'X', lines: [] });
     expect(r.success).toBe(false);
   });
 });

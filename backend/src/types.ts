@@ -42,7 +42,8 @@ export interface CreateInvoiceArgs {
   partyId: number;
   invoiceType: InvoiceType;
   issueDate: string;
-  dueDate: string;
+  dueDate?: string | null;
+  paymentTermId?: number | null;
   lines: InvoiceLineInput[];
   taxRateId?: number | null;
 }
