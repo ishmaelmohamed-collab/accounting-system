@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: accounting
+    env: node
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm run migrate && npm run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true

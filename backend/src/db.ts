@@ -1,7 +1,11 @@
 import { Pool, PoolClient, QueryResult } from 'pg';
 import { config } from './config';
 
-export const pool = new Pool(config.db);
+export const pool = new Pool(
+  config.databaseUrl
+    ? { connectionString: config.databaseUrl, ssl: { rejectUnauthorized: false } }
+    : config.db,
+);
 
 export function query(text: string, params?: unknown[]): Promise<QueryResult<any>> {
   return pool.query(text, params);
